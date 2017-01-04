@@ -255,7 +255,7 @@ DockerContainerizerProcess::Container::create(
   }
 
   touch = os::touch(path::join(directory, "stderr"));
-
+  LOG(INFO)<<"yes:touch:"<<directory;
   if (touch.isError()) {
     return Error("Failed to touch 'stderr': " + touch.error());
   }
@@ -308,7 +308,7 @@ DockerContainerizerProcess::Container::create(
     // Override the container and command to launch an executor
     // in a docker container.
     ContainerInfo newContainerInfo;
-
+    LOG(INFO)<<"yes:taskInfo.isSome() && flags.docker_mesos_image.isSome()";
     // Mounting in the docker socket so the executor can communicate to
     // the host docker daemon. We are assuming the current instance is
     // launching docker containers to the host daemon as well.
@@ -409,6 +409,7 @@ Future<Nothing> DockerContainerizerProcess::fetch(
 Future<Nothing> DockerContainerizerProcess::pull(
     const ContainerID& containerId)
 {
+  LOG(INFO)<<"DockerContainerizerProcess::pull";
   if (!containers_.contains(containerId)) {
     return Failure("Container is already destroyed");
   }
@@ -417,7 +418,7 @@ Future<Nothing> DockerContainerizerProcess::pull(
   container->state = Container::PULLING;
 
   string image = container->image();
-
+  LOG(INFO)<<"image:"<<image;
   Future<Docker::Image> future = docker->pull(
     container->directory,
     image,
@@ -427,6 +428,7 @@ Future<Nothing> DockerContainerizerProcess::pull(
 
   return future.then(defer(self(), [=]() {
     VLOG(1) << "Docker pull " << image << " completed";
+    LOG(INFO)<< "Docker pull " << image << " completed";
     return Nothing();
   }));
 }
@@ -561,6 +563,7 @@ Try<Nothing> DockerContainerizerProcess::updatePersistentVolumes(
 Future<Nothing> DockerContainerizerProcess::mountPersistentVolumes(
     const ContainerID& containerId)
 {
+  LOG(INFO)<<"yes:DockerContainerizerProcess::mountPersistentVolumes";
   if (!containers_.contains(containerId)) {
     return Failure("Container is already destroyed");
   }
@@ -785,7 +788,9 @@ Future<Nothing> DockerContainerizerProcess::_recover(
     const Option<SlaveState>& state,
     const list<Docker::Container>& _containers)
 {
+  LOG(INFO)<<"k:docker DockerContainerizerProcess::_recover";
   if (state.isSome()) {
+    LOG(INFO)<<"k:state.isSome";
     // Although the slave checkpoints executor pids, before 0.23
     // docker containers without custom executors didn't record the
     // container type in the executor info, therefore the Docker
@@ -849,6 +854,10 @@ Future<Nothing> DockerContainerizerProcess::_recover(
 
         if (run.get().completed) {
           VLOG(1) << "Skipping recovery of executor '" << executor.id
+                  << "' of framework '" << framework.id
+                  << "' because its latest run "
+                  << containerId << " is completed";
+          LOG(INFO)<< "Skipping recovery of executor '" << executor.id
                   << "' of framework '" << framework.id
                   << "' because its latest run "
                   << containerId << " is completed";
@@ -931,6 +940,7 @@ Future<Nothing> DockerContainerizerProcess::_recover(
   }
 
   if (flags.docker_kill_orphans) {
+    LOG(INFO)<<"k:flags.docker_kill_orphans";
     return __recover(_containers);
   }
 
@@ -941,12 +951,14 @@ Future<Nothing> DockerContainerizerProcess::_recover(
 Future<Nothing> DockerContainerizerProcess::__recover(
     const list<Docker::Container>& _containers)
 {
+  LOG(INFO)<<"yes:enter DockerContainerizerProcess::__recover";
   list<ContainerID> containerIds;
   list<Future<Nothing>> futures;
   foreach (const Docker::Container& container, _containers) {
     VLOG(1) << "Checking if Docker container named '"
             << container.name << "' was started by Mesos";
-
+    LOG(INFO) << "Checking if Docker container named '"
+            << container.name << "' was started by Mesos";
     Option<ContainerID> id = parse(container);
 
     // Ignore containers that Mesos didn't start.
@@ -955,6 +967,8 @@ Future<Nothing> DockerContainerizerProcess::__recover(
     }
 
     VLOG(1) << "Checking if Mesos container with ID '"
+            << stringify(id.get()) << "' has been orphaned";
+    LOG(INFO)<< "Checking if Mesos container with ID '"
             << stringify(id.get()) << "' has been orphaned";
 
     // Check if we're watching an executor for this container ID and
@@ -1052,6 +1066,7 @@ Future<bool> DockerContainerizerProcess::launch(
   Future<Nothing> f = Nothing();
 
   if (HookManager::hooksAvailable()) {
+    LOG(INFO)<<"yes:HookManager::hooksAvailable()";
     f = HookManager::slavePreLaunchDockerEnvironmentDecorator(
         taskInfo,
         executorInfo,
@@ -1136,6 +1151,8 @@ Future<bool> DockerContainerizerProcess::_launch(
     // where 'update' can be called before mesos-docker-executor
     // creates the Docker container for the task. See more details in
     // the comments of r33174.
+    LOG(INFO)<<"yes:taskInfo.isSome() && flags.docker_mesos_image.isNone()";
+    //LOG(INFO)<<"image:"<<flags.docker_mesos_image.get();
     return container->launch = fetch(containerId, slaveId)
       .then(defer(self(), [=]() {
         return pull(containerId);
@@ -1156,11 +1173,12 @@ Future<bool> DockerContainerizerProcess::_launch(
   }
 
   string containerName = container->name();
-
+  LOG(INFO)<<"yes:containerName:"<<containerName;
   if (container->executorName().isSome()) {
     // Launch the container with the executor name as we expect the
     // executor will launch the docker container.
     containerName = container->executorName().get();
+    LOG(INFO)<<"yes:2 containerName:"<<containerName;
   }
 
   // Launching task or executor by launching a separate docker
@@ -1206,6 +1224,7 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
     const ContainerID& containerId,
     const string& containerName)
 {
+  LOG(INFO)<<"yes:DockerContainerizerProcess::launchExecutorContainer";
   if (!containers_.contains(containerId)) {
     return Failure("Container is already destroyed");
   }
@@ -1232,7 +1251,7 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
         None(), // No extra devices.
         subprocessInfo.out,
         subprocessInfo.err);
-
+    LOG(INFO)<<"docker.run";
     // It's possible that 'run' terminates before we're able to
     // obtain an 'inspect' result. It's also possible that 'run'
     // fails in such a manner that we will never see the container
@@ -1279,6 +1298,7 @@ Future<Docker::Container> DockerContainerizerProcess::launchExecutorContainer(
 Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
     const ContainerID& containerId)
 {
+  LOG(INFO)<<"yes:DockerContainerizerProcess::launchExecutorProcess";
   if (!containers_.contains(containerId)) {
     return Failure("Container is already destroyed");
   }
@@ -1349,7 +1369,8 @@ Future<pid_t> DockerContainerizerProcess::launchExecutorProcess(
 
     VLOG(1) << "Launching 'mesos-docker-executor' with flags '"
             << launchFlags << "'";
-
+    LOG(INFO)<< "Launching 'mesos-docker-executor' with flags '"
+            << launchFlags << "'";
     // Construct the mesos-docker-executor using the "name" we gave the
     // container (to distinguish it from Docker containers not created
     // by Mesos).
@@ -1379,6 +1400,7 @@ Future<pid_t> DockerContainerizerProcess::checkpointExecutor(
     const ContainerID& containerId,
     const Docker::Container& dockerContainer)
 {
+  LOG(INFO)<<"yes:DockerContainerizerProcess::checkpointExecutor";
   // After we do Docker::run we shouldn't remove a container until
   // after we set Container::status.
   CHECK(containers_.contains(containerId));
@@ -1404,6 +1426,7 @@ Future<bool> DockerContainerizerProcess::reapExecutor(
     const ContainerID& containerId,
     pid_t pid)
 {
+  LOG(INFO)<<"yes:enter DockerContainerizerProcess::reapExecutor";
   // After we do Docker::run we shouldn't remove a container until
   // after we set 'status', which we do in this function.
   CHECK(containers_.contains(containerId));
@@ -1412,10 +1435,10 @@ Future<bool> DockerContainerizerProcess::reapExecutor(
 
   // And finally watch for when the container gets reaped.
   container->status.set(process::reap(pid));
-
+  LOG(INFO)<<"yes:ready reaped container->status.set:"<<pid;
   container->status.future().get()
     .onAny(defer(self(), &Self::reaped, containerId));
-
+  LOG(INFO)<<"yes:here 1";
   return true;
 }
 
@@ -1462,7 +1485,7 @@ Future<Nothing> DockerContainerizerProcess::update(
   if (container->pid.isSome()) {
     return __update(containerId, _resources, container->pid.get());
   }
-
+  LOG(INFO)<<"yes:ready docker->inspect";
   return docker->inspect(containers_[containerId]->name())
     .then(defer(self(), &Self::_update, containerId, _resources, lambda::_1));
 #else
@@ -2003,6 +2026,7 @@ void DockerContainerizerProcess::__destroy(
     bool killed,
     const Future<Nothing>& kill)
 {
+  LOG(INFO)<<"yes:enter DockerContainerizerProcess::__destroy";
   CHECK(containers_.contains(containerId));
 
   Container* container = containers_[containerId];
@@ -2044,6 +2068,7 @@ void DockerContainerizerProcess::___destroy(
     bool killed,
     const Future<Option<int>>& status)
 {
+  LOG(INFO)<<"yes:enter DockerContainerizerProcess::___destroy";
   CHECK(containers_.contains(containerId));
 
   Try<Nothing> unmount = unmountPersistentVolumes(containerId);
@@ -2071,9 +2096,12 @@ void DockerContainerizerProcess::___destroy(
   container->termination.set(termination);
 
   containers_.erase(containerId);
-
+  LOG(INFO)<<"yes:flags.docker_remove_delay:"<<flags.docker_remove_delay;
+  //Duration docker_remove_delay_froad=Seconds(15);
+  //LOG(INFO)<<"yes:docker_remove_delay_froad:"<<docker_remove_delay_froad;
   delay(
     flags.docker_remove_delay,
+    //docker_remove_delay_froad,
     self(),
     &Self::remove,
     container->name(),
@@ -2140,6 +2168,7 @@ void DockerContainerizerProcess::remove(
     const string& containerName,
     const Option<string>& executor)
 {
+  LOG(INFO)<<"yes:enter remove,ready rm docker:"<<containerName;
   docker->rm(containerName, true);
   if (executor.isSome()) {
     docker->rm(executor.get(), true);

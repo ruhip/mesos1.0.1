@@ -152,6 +152,8 @@ public:
   std::string xfs_project_range;
 #endif
   bool http_command_executor;
+  Option<std::string> cpu_up;
+  Option<std::string> mem_up;
 };
 
 } // namespace slave {

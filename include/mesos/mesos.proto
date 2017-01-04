@@ -1361,6 +1361,7 @@ message Task {
 
   // Specific user under which task is running.
   optional string user = 14;
+  optional string containerId = 15;
 }
 
 
@@ -1472,6 +1473,7 @@ message TaskStatus {
   // Container related information that is resolved dynamically such as
   // network address.
   optional ContainerStatus container_status = 13;
+  optional string task_containerId = 14;
 }
 
 

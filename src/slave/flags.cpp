@@ -867,4 +867,12 @@ mesos::internal::slave::Flags::Flags()
       "NOTE: This flag is *experimental* and should not be used in\n"
       "production yet.",
       false);
+  //20161115 ruhip
+  add(&Flags::cpu_up,
+      "cpu_up",
+      "promote cpu_up nums");  
+  add(&Flags::mem_up,
+      "mem_up",
+      "promote mem_up nums");
+
 }

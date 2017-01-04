@@ -1769,6 +1769,7 @@ private:
   // Roles with > 0 frameworks currently registered.
   hashmap<std::string, Role*> activeRoles;
 
+  hashmap<std::string,std::string> tasksContainerid;
   // Configured role whitelist if using the (deprecated) "explicit
   // roles" feature. If this is `None`, any role is allowed.
   Option<hashset<std::string>> roleWhitelist;

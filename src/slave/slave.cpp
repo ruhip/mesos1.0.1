@@ -790,6 +790,7 @@ void Slave::finalize()
     // slave doesn't recover the state when it restarts and registers
     // as a new slave with the master.
     if (os::exists(paths::getLatestSlavePath(metaDir))) {
+      LOG(INFO)<<"yes:ready rm latest symlink:"<<paths::getLatestSlavePath(metaDir);
       CHECK_SOME(os::rm(paths::getLatestSlavePath(metaDir)));
     }
   }
@@ -1300,6 +1301,7 @@ void Slave::reregistered(
 
 void Slave::doReliableRegistration(Duration maxBackoff)
 {
+  LOG(INFO)<<"yes:doReliableRegistration(Duration maxBackoff)";
   if (master.isNone()) {
     LOG(INFO) << "Skipping registration because no master present";
     return;
@@ -1331,6 +1333,7 @@ void Slave::doReliableRegistration(Duration maxBackoff)
   link(master.get());
 
   if (!info.has_id()) {
+    LOG(INFO)<<"yes:ready Registering for the first time";
     // Registering for the first time.
     RegisterSlaveMessage message;
     message.set_version(MESOS_VERSION);
@@ -1338,9 +1341,10 @@ void Slave::doReliableRegistration(Duration maxBackoff)
 
     // Include checkpointed resources.
     message.mutable_checkpointed_resources()->CopyFrom(checkpointedResources);
-
+    LOG(INFO)<<"yes:send(master.get(), message)";
     send(master.get(), message);
   } else {
+    LOG(INFO)<<"yes:Re-registering, so send tasks running.";
     // Re-registering, so send tasks running.
     ReregisterSlaveMessage message;
     message.set_version(MESOS_VERSION);
@@ -1351,6 +1355,7 @@ void Slave::doReliableRegistration(Duration maxBackoff)
     message.mutable_slave()->CopyFrom(info);
 
     foreachvalue (Framework* framework, frameworks) {
+      LOG(INFO)<<"yes:frameworkinfo:"<<framework->id();
       message.add_frameworks()->CopyFrom(framework->info);
 
       // TODO(bmahler): We need to send the executors for these
@@ -1411,7 +1416,8 @@ void Slave::doReliableRegistration(Duration maxBackoff)
     foreach (const Owned<Framework>& completedFramework, completedFrameworks) {
       VLOG(1) << "Reregistering completed framework "
                 << completedFramework->id();
-
+      LOG(INFO)<<"yes:Reregistering completed framework "
+                << completedFramework->id();
       Archive::Framework* completedFramework_ =
         message.add_completed_frameworks();
 
@@ -1466,6 +1472,53 @@ Future<bool> Slave::unschedule(const string& path)
   return gc->unschedule(path);
 }
 
+void outputLabels(Labels labels)
+{
+  LOG(INFO)<<"yes:enter outputLabels:";
+  LOG(INFO) << "{";
+
+  for (int i = 0; i < labels.labels().size(); i++) {
+    const Label& label = labels.labels().Get(i);
+
+    LOG(INFO) << label.key();
+
+    if (label.has_value()) {
+      LOG(INFO) << ": " << label.value();
+    }
+
+    if (i + 1 < labels.labels().size()) {
+      LOG(INFO) << ", ";
+    }
+  }
+
+  LOG(INFO) << "}";
+  LOG(INFO)<<"yes:out ouputLabels";
+}
+void outputTaskInfo(TaskInfo task)
+{
+//    LOG(INFO)<<"yes:enter outputTaskInfo";
+/*    // Labels labels=task.labels();
+    //outputLabels(labels);
+    //LOG(INFO) << task.labels();
+	LOG(INFO)<<"taskid:"<< task.task_id();
+	LOG(INFO)<<"slave_id:"<<task.slave_id();
+	LOG(INFO)<<"task_name:"<<task.name();
+	LOG(INFO)<<"resource:"<<task.resources();
+	LOG(INFO)<<"executor:"<<task.executor();
+	//LOG(INFO)<<"command:"<<task.command();
+	LOG(INFO)<<"container:"<<task.container();
+	//LOG(INFO)<<"health_check:"<<task.health_check();
+	//LOG(INFO)<<"kill_policy:"<<task.kill_policy();
+	LOG(INFO)<<"data:"<<task.data();
+	//outputLabels( task.labels() );
+	//LOG(INFO)<<"discovery:"<<task.discovery();
+*/
+LOG(INFO) <<"yes:taskinfo:" << task ;	
+	
+	//LOG(INFO)<<"yes:out outputTaskInfo";	
+}
+
+
 
 // TODO(vinod): Instead of crashing the slave on checkpoint errors,
 // send TASK_LOST to the framework.
@@ -1476,6 +1529,7 @@ void Slave::runTask(
     const UPID& pid,
     TaskInfo task)
 {
+  outputTaskInfo(task);
   if (master != from) {
     LOG(WARNING) << "Ignoring run task message from " << from
                  << " because it is not the expected master: "
@@ -1577,7 +1631,7 @@ void Slave::runTask(
   // are not scheduled for deletion before '_runTask()' is called.
   CHECK_NOTNULL(framework);
   framework->pending[executorId][task.task_id()] = task;
-
+  LOG(INFO)<<"yes:framework->pending:"<<executorId<<","<<task.task_id();
   // If we are about to create a new executor, unschedule the top
   // level work and meta directories from getting gc'ed.
   Executor* executor = framework->getExecutor(executorId);
@@ -1585,7 +1639,7 @@ void Slave::runTask(
     // Unschedule executor work directory.
     string path = paths::getExecutorPath(
         flags.work_dir, info.id(), frameworkId, executorId);
-
+    LOG(INFO)<<"yes:executor == nullptr:"<<path;
     if (os::exists(path)) {
       unschedule = unschedule.then(defer(self(), &Self::unschedule, path));
     }
@@ -1703,7 +1757,7 @@ void Slave::_runTask(
   // out of order.
   Resources checkpointedTaskResources =
     Resources(task.resources()).filter(needCheckpointing);
-
+  // LOG(INFO)<<"yes:task resource:"<<task.resources();
   foreach (const Resource& resource, checkpointedTaskResources) {
     if (!checkpointedResources.contains(resource)) {
       LOG(WARNING) << "Unknown checkpointed resource " << resource
@@ -1796,6 +1850,7 @@ void Slave::_runTask(
   Executor* executor = framework->getExecutor(executorId);
 
   if (executor == nullptr) {
+    LOG(INFO)<<"yes:now framework->launchExecutor";
     executor = framework->launchExecutor(executorInfo, task);
   }
 
@@ -1850,7 +1905,7 @@ void Slave::_runTask(
 
       // Queue task until the containerizer is updated with new
       // resource limits (MESOS-998).
-      LOG(INFO) << "Queuing task '" << task.task_id()
+      LOG(INFO) << "2 Queuing task '" << task.task_id()
                 << "' for executor " << *executor;
 
       executor->queuedTasks[task.task_id()] = task;
@@ -2175,6 +2230,7 @@ void Slave::killTask(
       } else {
         // Send a message to the executor and wait for
         // it to send us a status update.
+        LOG(INFO)<<"yes:kill task message:"<<frameworkId<<","<<taskId;
         KillTaskMessage message;
         message.mutable_framework_id()->MergeFrom(frameworkId);
         message.mutable_task_id()->MergeFrom(taskId);
@@ -2598,6 +2654,10 @@ void Slave::_statusUpdateAcknowledgement(
           << " acknowledgement (UUID: " << uuid
           << ") for task " << taskId
           << " of framework " << frameworkId;
+  LOG(INFO)<< "yes:Status update manager successfully handled status update"
+          << " acknowledgement (UUID: " << uuid
+          << ") for task " << taskId
+          << " of framework " << frameworkId;
 
   CHECK(state == RECOVERING || state == DISCONNECTED ||
         state == RUNNING || state == TERMINATING)
@@ -2898,7 +2958,7 @@ void Slave::registerExecutor(
       // Save the pid for the executor.
       executor->pid = from;
       link(from);
-
+      LOG(INFO)<<"yes:link to exector";
       if (framework->info.checkpoint()) {
         // TODO(vinod): This checkpointing should be done
         // asynchronously as it is in the fast path of the slave!
@@ -2913,6 +2973,8 @@ void Slave::registerExecutor(
 
         VLOG(1) << "Checkpointing executor pid '"
                 << executor->pid.get() << "' to '" << path << "'";
+        LOG(INFO) << "Checkpointing executor pid '"<< executor->pid.get() << "' to '" << path << "'";
+
         CHECK_SOME(state::checkpoint(path, executor->pid.get()));
       }
 
@@ -3211,6 +3273,13 @@ void Slave::statusUpdate(StatusUpdate update, const Option<UPID>& pid)
   LOG(INFO) << "Handling status update " << update
             << (pid.isSome() ? " from " + stringify(pid.get()) : "");
 
+  if( TASK_FINISHED == update.status().state() || TASK_FAILED == update.status().state() )
+  {
+      //LOG(INFO)<<"yes:update.status().state(),so return:"<<update.status().state();
+      //return;
+  }
+  LOG(INFO)<<"yes:update.status().state():"<<update.status().state();
+
   CHECK(state == RECOVERING || state == DISCONNECTED ||
         state == RUNNING || state == TERMINATING)
     << state;
@@ -3477,6 +3546,7 @@ void Slave::__statusUpdate(
   }
 
   if (checkpoint) {
+    LOG(INFO)<<"yes:checkpoint ready statusUpdateManager->update";
     // Ask the status update manager to checkpoint and reliably send the update.
     statusUpdateManager->update(update, info.id(), executorId, containerId)
       .onAny(defer(self(), &Slave::___statusUpdate, lambda::_1, update, pid));
@@ -3561,7 +3631,7 @@ void Slave::forward(StatusUpdate update)
     << "Expecting updates without 'uuid' to have been rejected";
 
   update.mutable_status()->set_uuid(update.uuid());
-
+  //bool bFinished=false;
   // Update the status update state of the task and include the latest
   // state of the task in the status update.
   Framework* framework = getFramework(update.framework_id());
@@ -3590,12 +3660,39 @@ void Slave::forward(StatusUpdate update)
         // that is ok because the status update state will be updated
         // when the next update is forwarded to the slave.
         task->set_status_update_state(update.status().state());
-        task->set_status_update_uuid(update.uuid());
+        
+        string strcontainerId = executor->containerId.value();
+        strcontainerId = "mesos-" + info.id().value() + "." +  strcontainerId;
+        LOG(INFO)<<"yes:task containerId:"<<strcontainerId;
+        task->set_containerid(strcontainerId);        
+       	update.mutable_status()->set_task_containerid(strcontainerId);
+	//LOG(INFO)<<"yes:update.set_task_containerid:"<<strcontainerId; 
+        //strcontainerId = "taskcontainerid_" + strcontainerId;
+        //update.mutable_status()->set_message(strcontainerId);
+        //LOG(INFO)<<"yes:update.set_task message:"<<strcontainerId;
 
+        //update.mutable_status()->mutable_task_id()->set_value(strtaskid);
+        
+        task->set_status_update_uuid(update.uuid());
         // Include the latest state of task in the update. See the
         // comments in 'statusUpdate()' on why informing the master
         // about the latest state of the task is important.
+        
         update.set_latest_state(task->state());
+       
+        //string strId= update.uuid() + "." + executor->containerId.value();
+	//update.mutable_status()->set_uuid(strId);
+        //LOG(INFO)<<"yes:to master new uuid:"<<strId;
+        //LOG(INFO)<<"yes:executor containerid:"<<executor->containerId; 
+        /*
+        //20161115 ruhip test modify
+	if( task->state() == TASK_FINISHED )
+	{
+            bFinished=true;
+            LOG(INFO)<<"yes:here task->state() == TASK_FINISHED";
+	    update.set_latest_state(TASK_RUNNING);
+	}
+        */
       }
     }
   }
@@ -3616,7 +3713,15 @@ void Slave::forward(StatusUpdate update)
   StatusUpdateMessage message;
   message.mutable_update()->MergeFrom(update);
   message.set_pid(self()); // The ACK will be first received by the slave.
-
+  
+  /* 
+  //20161115 ruhip test modify
+  if( bFinished == true)
+  { 
+     LOG(INFO)<<"yes:bFinished == true,not send master";
+     return ;
+  }
+  */
   send(master.get(), message);
 }
 
@@ -3770,10 +3875,10 @@ ExecutorInfo Slave::getExecutorInfo(
   CHECK_NE(task.has_executor(), task.has_command())
     << "Task " << task.task_id()
     << " should have either CommandInfo or ExecutorInfo set but not both";
-
+  LOG(INFO)<<"yes:enter  Slave::getExecutorInfo";
   if (task.has_command()) {
     ExecutorInfo executor;
-
+    LOG(INFO)<<"yes:task.has_command()";
     // Command executors share the same id as the task.
     executor.mutable_executor_id()->set_value(task.task_id().value());
     executor.mutable_framework_id()->CopyFrom(frameworkInfo.id());
@@ -3842,7 +3947,7 @@ ExecutorInfo Slave::getExecutorInfo(
 
     executor.set_name("Command Executor " + name);
     executor.set_source(task.task_id().value());
-
+    LOG(INFO)<<"yes:executor name:"<<name;
     // Copy the [uris, environment, container, user] fields from the
     // CommandInfo to get the URIs we need to download, the
     // environment variables that should get set, the necessary
@@ -3902,7 +4007,7 @@ ExecutorInfo Slave::getExecutorInfo(
       executor.mutable_command()->add_arguments("mesos-executor");
       executor.mutable_command()->add_arguments(
           "--launcher_dir=" + flags.launcher_dir);
-
+      LOG(INFO)<<"yes:path:"<<path.get();
       if (hasRootfs) {
         executor.mutable_command()->add_arguments(
             "--sandbox_directory=" + flags.sandbox_directory);
@@ -3957,6 +4062,7 @@ void Slave::executorLaunched(
     const ContainerID& containerId,
     const Future<bool>& future)
 {
+  LOG(INFO)<<"yes:Slave::executorLaunched";
   // Set up callback for executor termination. Note that we do this
   // regardless of whether or not we have successfully launched the
   // executor because even if we failed to launch the executor the
@@ -3971,7 +4077,7 @@ void Slave::executorLaunched(
                  frameworkId,
                  executorId,
                  lambda::_1));
-
+  LOG(INFO)<<"yes:executorLaunched containerizer->wait(containerId)";
   if (!future.isReady()) {
     LOG(ERROR) << "Container '" << containerId
                << "' for executor '" << executorId
@@ -4619,6 +4725,7 @@ Future<Nothing> Slave::recover(const Result<state::State>& state)
   // NOTE: 'resourcesState' is None if the slave rootDir does not
   // exist or the resources checkpoint file cannot be found.
   if (resourcesState.isSome()) {
+    LOG(INFO)<<"yes:resourcesState.isSome:"<<resourcesState.get().resources;
     if (resourcesState.get().errors > 0) {
       LOG(WARNING) << "Errors encountered during resources recovery: "
                    << resourcesState.get().errors;
@@ -4632,7 +4739,7 @@ Future<Nothing> Slave::recover(const Result<state::State>& state)
     Try<Resources> totalResources = applyCheckpointedResources(
         info.resources(),
         resourcesState.get().resources);
-
+    //LOG(INFO)<<"yes:totalResources:"<<totalResources;
     if (totalResources.isError()) {
       return Failure(
           "Checkpointed resources " +
@@ -4652,6 +4759,7 @@ Future<Nothing> Slave::recover(const Result<state::State>& state)
     // as a hack to compare the info created from options/flags with
     // the recovered info.
     info.mutable_id()->CopyFrom(slaveState.get().id);
+    //LOG(INFO)<<"yes:info id:"<<info.id();
     if (flags.recover == "reconnect" &&
         !(info == slaveState.get().info.get())) {
       return Failure(strings::join(
@@ -4665,7 +4773,7 @@ Future<Nothing> Slave::recover(const Result<state::State>& state)
     }
 
     info = slaveState.get().info.get(); // Recover the slave info.
-
+    LOG(INFO)<<"yes:slaver info:"<<stringify(info);
     if (slaveState.get().errors > 0) {
       LOG(WARNING) << "Errors encountered during agent recovery: "
                    << slaveState.get().errors;
@@ -4701,6 +4809,7 @@ Future<Nothing> Slave::_recoverContainerizer(
 
 Future<Nothing> Slave::_recover()
 {
+  LOG(INFO)<<"yes:enter Slave::_recover";
   foreachvalue (Framework* framework, frameworks) {
     foreachvalue (Executor* executor, framework->executors) {
       // Set up callback for executor termination.
@@ -4797,6 +4906,7 @@ void Slave::__recover(const Future<Nothing>& future)
   // in the recovery code, to recover all slaves instead of only
   // the latest slave.
   const string directory = path::join(flags.work_dir, "slaves");
+  LOG(INFO)<<"yes:directory:"<<directory;
   Try<list<string>> entries = os::ls(directory);
   if (entries.isSome()) {
     foreach (const string& entry, entries.get()) {
@@ -4848,7 +4958,7 @@ void Slave::__recover(const Future<Nothing>& future)
     // Slave started in cleanup mode.
     CHECK_EQ("cleanup", flags.recover);
     state = TERMINATING;
-
+    LOG(INFO)<<"yes:Slave started in cleanup mode.so terminate(self())";
     if (frameworks.empty()) {
       terminate(self());
     }
@@ -4912,16 +5022,19 @@ void Slave::recoverFramework(const FrameworkState& state)
   frameworks[framework->id()] = framework;
 
   if (recheckpoint) {
+    LOG(INFO)<<"yes:framework->checkpointFramework";
     framework->checkpointFramework();
   }
 
   // Now recover the executors for this framework.
   foreachvalue (const ExecutorState& executorState, state.executors) {
+    LOG(INFO)<<"yes:framework->recoverExecutor(executorState)";
     framework->recoverExecutor(executorState);
   }
 
   // Remove the framework in case we didn't recover any executors.
   if (framework->executors.empty()) {
+    LOG(INFO)<<"yes:removeFramework(framework)";
     removeFramework(framework);
   }
 }
@@ -4952,7 +5065,7 @@ Future<Nothing> Slave::garbageCollect(const string& path)
 void Slave::forwardOversubscribed()
 {
   VLOG(1) << "Querying resource estimator for oversubscribable resources";
-
+  //LOG(INFO) << "Querying resource estimator for oversubscribable resources";
   resourceEstimator->oversubscribable()
     .onAny(defer(self(), &Self::_forwardOversubscribed, lambda::_1));
 }
@@ -4960,6 +5073,7 @@ void Slave::forwardOversubscribed()
 
 void Slave::_forwardOversubscribed(const Future<Resources>& oversubscribable)
 {
+  //LOG(INFO)<<"enter:Slave::_forwardOversubscribed";
   if (!oversubscribable.isReady()) {
     LOG(ERROR) << "Failed to get oversubscribable resources: "
                << (oversubscribable.isFailed()
@@ -4967,7 +5081,9 @@ void Slave::_forwardOversubscribed(const Future<Resources>& oversubscribable)
   } else {
     VLOG(1) << "Received oversubscribable resources "
             << oversubscribable.get() << " from the resource estimator";
-
+    /*LOG(INFO) << "yes:Received oversubscribable resources "
+            << oversubscribable.get() << " from the resource estimator";
+    */
     // Oversubscribable resources must be tagged as revocable.
     //
     // TODO(bmahler): Consider tagging input as revocable
@@ -5373,10 +5489,11 @@ Future<bool> Slave::authorizeSandboxAccess(
     const FrameworkID& frameworkId,
     const ExecutorID& executorId)
 {
+  LOG(INFO)<<"yes:Slave::authorizeSandboxAccess";
   if (authorizer.isNone()) {
     return true;
   }
-
+  LOG(INFO)<<"yes:here 1";
   // Set authorization subject.
   authorization::Subject subject;
 
@@ -5629,6 +5746,18 @@ Executor* Framework::launchExecutor(
   // need the ContainerID to create the executor's directory. Fix
   // this when 'launchExecutor()' is handled asynchronously.
   ContainerID containerId;
+  /*std::string strTaskId=taskInfo.task_id().value();
+  size_t index = 0;
+  LOG(INFO)<<"yes:Framework::launchExecutor:"<<taskInfo.name();
+  LOG(INFO)<<"yes:Framework::launchExecutor:"<<strTaskId;
+  std::string strAppId = taskInfo.name();
+  if( (index=strTaskId.find(".")) != std::string::npos )
+  {
+     //strAppId = strTaskId.substr(index);
+  }
+  std::string strContainerId=UUID::random().toString();
+  strContainerId = strAppId + "_" + strContainerId;
+  containerId.set_value(strContainerId);*/
   containerId.set_value(UUID::random().toString());
 
   Option<string> user = None();
@@ -5707,6 +5836,7 @@ Executor* Framework::launchExecutor(
   // Launch the container.
   Future<bool> launch;
   if (!executor->isCommandExecutor()) {
+    LOG(INFO)<<"yes:!executor->isCommandExecutor()";
     // If the executor is _not_ a command executor, this means that
     // the task will include the executor to run. The actual task to
     // run will be enqueued and subsequently handled by the executor
@@ -5720,6 +5850,7 @@ Executor* Framework::launchExecutor(
         slave->self(),
         info.checkpoint());
   } else {
+    LOG(INFO)<<"yes:executor->isCommandExecutor()";
     // An executor has _not_ been provided by the task and will
     // instead define a command and/or container to run. Right now,
     // these tasks will require an executor anyway and the slave
@@ -5826,6 +5957,7 @@ void Framework::recoverExecutor(const ExecutorState& state)
   foreachvalue (const RunState& run, state.runs) {
     CHECK_SOME(run.id);
     const ContainerID& runId = run.id.get();
+    LOG(INFO)<<"yes:latest,runid:"<<latest<<","<<runId;
     if (latest != runId) {
       // GC the executor run's work directory.
       // TODO(vinod): Expose this directory to webui by recovering the
@@ -5916,18 +6048,19 @@ void Framework::recoverExecutor(const ExecutorState& state)
     // GC the executor run's work directory.
     const string path = paths::getExecutorRunPath(
         slave->flags.work_dir, slave->info.id(), id(), state.id, runId);
-
+    //LOG(INFO)<<"yes:1 slave->garbageCollect:"<<path;
     slave->garbageCollect(path)
        .then(defer(slave, &Slave::detachFile, path));
 
+    //LOG(INFO)<<"yes:2 slave->garbageCollect";
     // GC the executor run's meta directory.
     slave->garbageCollect(paths::getExecutorRunPath(
         slave->metaDir, slave->info.id(), id(), state.id, runId));
-
+    //LOG(INFO)<<"yes:3 slave->garbageCollect";
     // GC the top level executor work directory.
     slave->garbageCollect(paths::getExecutorPath(
         slave->flags.work_dir, slave->info.id(), id(), state.id));
-
+     //LOG(INFO)<<"yes:4 slave->garbageCollect";
     // GC the top level executor meta directory.
     slave->garbageCollect(paths::getExecutorPath(
         slave->metaDir, slave->info.id(), id(), state.id));
@@ -6012,7 +6145,7 @@ void Executor::terminateTask(
     const mesos::TaskStatus& status)
 {
   VLOG(1) << "Terminating task " << taskId;
-
+  LOG(INFO)<<"yes:Terminating task " << taskId;
   Task* task = nullptr;
   // Remove the task if it's queued.
   if (queuedTasks.contains(taskId)) {
@@ -6053,7 +6186,7 @@ void Executor::terminateTask(
 void Executor::completeTask(const TaskID& taskId)
 {
   VLOG(1) << "Completing task " << taskId;
-
+  LOG(INFO)<<"yes:Completing task " << taskId;
   CHECK(terminatedTasks.contains(taskId))
     << "Failed to find terminated task " << taskId;
 
@@ -6116,7 +6249,7 @@ void Executor::recoverTask(const TaskState& state)
   // upper-bound. The actual resources needed (for live tasks) by
   // the isolator will be calculated when the executor re-registers.
   resources += state.info.get().resources();
-
+  LOG(INFO)<<"yes:resources:"<<resources;
   // Read updates to get the latest state of the task.
   foreach (const StatusUpdate& update, state.updates) {
     updateTaskState(update.status());

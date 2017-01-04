@@ -197,9 +197,11 @@ protected:
   {
     if (pinged) {
       timeouts++; // No pong has been received before the timeout.
-      if (timeouts >= maxSlavePingTimeouts) {
+      LOG(INFO)<<"yes:pinged timeouts:"<<timeouts;
+      if (timeouts >= maxSlavePingTimeouts ) {
         // No pong has been received for the last
         // 'maxSlavePingTimeouts' pings.
+        LOG(INFO)<<"yes:ready shut down slave";
         shutdown();
       }
     }
@@ -306,7 +308,7 @@ Master::Master(
 
   // Master ID is generated randomly based on UUID.
   info_.set_id(UUID::random().toString());
-
+  LOG(INFO)<<"yes:info_id:"<<info_.id();
   // NOTE: Currently, we store ip in MasterInfo in network order,
   // which should be fixed. See MESOS-1201 for details.
   // TODO(marco): The ip, port, hostname fields above are
@@ -1963,7 +1965,7 @@ void Master::receive(
     const scheduler::Call& call)
 {
   // TODO(vinod): Add metrics for calls.
-
+  LOG(INFO)<<"yes:enter Master::receive calltype:"<<call.type();
   Option<Error> error = validation::scheduler::call::validate(call);
 
   if (error.isSome()) {
@@ -5210,10 +5212,30 @@ void Master::forward(
       task->set_status_update_uuid(update.status().uuid());
     }
   }
-
+  
+  LOG(INFO)<<"yes:ready send to framework StatusUpdateMessage";
+  LOG(INFO)<<"yes:task contained id:"<<update.status().task_containerid();
+ 
+  string strContainerid = "sorry,none containerid";
+  string strTaskid=update.status().task_id().value();
+  if( !tasksContainerid.contains(strTaskid) )
+  {
+      if( update.status().task_containerid().length() > 1 )
+	  {
+              tasksContainerid[strTaskid] = update.status().task_containerid();
+	  }
+  }
+  if( tasksContainerid.contains(strTaskid) )
+  {
+      strContainerid = tasksContainerid[strTaskid];
+  }
+  LOG(INFO)<<"yes:task contained id 2:"<<strContainerid;
   StatusUpdateMessage message;
   message.mutable_update()->MergeFrom(update);
   message.set_pid(acknowledgee);
+  //ruhip modify 20161228
+  message.mutable_update()->mutable_status()->set_task_containerid(strContainerid);
+  //end
   framework->send(message);
 }
 

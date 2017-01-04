@@ -90,7 +90,12 @@ Try<Resources> Containerizer::resources(const Flags& flags)
     } else {
       cpus = cpus_.get();
     }
-
+    //20161115 ruhip test
+    // cpus = cpus*10;
+    if(flags.cpu_up.isSome())
+    {
+       cpus = cpus * atoi(flags.cpu_up.get().c_str());
+    }
     resources += Resources::parse(
         "cpus",
         stringify(cpus),
@@ -131,7 +136,11 @@ Try<Resources> Containerizer::resources(const Flags& flags)
         mem = Bytes(total.bytes() / 2); // Use 50% of the memory.
       }
     }
-
+    //20161115 ruhip
+    if(flags.mem_up.isSome())
+    {
+       mem = mem * atoi(flags.mem_up.get().c_str());
+    }
     resources += Resources::parse(
         "mem",
         stringify(mem.megabytes()),
@@ -319,6 +328,8 @@ Try<Containerizer*> Containerizer::create(
   if (containerizers.size() == 1) {
     return containerizers.front();
   }
+  
+ LOG(INFO)<<" k: ComposingContainerizer";
 
   Try<ComposingContainerizer*> containerizer =
     ComposingContainerizer::create(containerizers);
@@ -340,7 +351,7 @@ map<string, string> executorEnvironment(
     const Flags& flags)
 {
   map<string, string> environment;
-
+  LOG(INFO)<<"yes:map<string, string> executorEnvironment";
   // In cases where DNS is not available on the slave, the absence of
   // LIBPROCESS_IP in the executor's environment will cause an error when the
   // new executor process attempts a hostname lookup. Thus, we pass the slave's
