@@ -553,7 +553,8 @@ Future<Option<int>> Docker::run(
       continue;
     }
     /*20170106 ruhip modify*/
-    std::string senvName = variable.name();   
+    std::string senvName = variable.name();  
+    /* 
     if( strcmp(senvName.c_str(),"PORT") == 0 || strcmp(senvName.c_str(),"PORTS") == 0 || strcmp(senvName.c_str(),"PORT_80") == 0 ||
             strcmp(senvName.c_str(),"MARATHON_APP_ID") == 0 || strcmp(senvName.c_str(),"MARATHON_APP_LABELS") == 0 ||
             strcmp(senvName.c_str(),"MESOS_TASK_ID") == 0 || strcmp(senvName.c_str(),"MARATHON_APP_RESOURCE_MEM") == 0 || 
@@ -565,6 +566,7 @@ Future<Option<int>> Docker::run(
        LOG(INFO)<<"yes:filter nouse env variable:"<<variable.name();
        continue;
     }
+    */
     if( strcmp(senvName.c_str(),"froad_net") == 0 )
     {
        sfroad_net = variable.value();
@@ -583,15 +585,16 @@ Future<Option<int>> Docker::run(
         }
         continue;
     }
-    argv.push_back("-e");
-    argv.push_back(variable.name() + "=" + variable.value());
+    //argv.push_back("-e");
+    //argv.push_back(variable.name() + "=" + variable.value());
   }
 
+/*
   argv.push_back("-e");
   argv.push_back("MESOS_SANDBOX=" + mappedDirectory);
   argv.push_back("-e");
   argv.push_back("MESOS_CONTAINER_NAME=" + name);
-
+*/
    /*20170105 ruhip test*/
     argv.push_back("-v");
     argv.push_back("/var/lib/lxcfs/proc/:/docker/proc/:rw");
