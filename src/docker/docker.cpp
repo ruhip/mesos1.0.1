@@ -510,6 +510,11 @@ Future<Option<int>> Docker::run(
   argv.push_back(socket);
   argv.push_back("run");
 
+  /*ruhip modify 20161107*/
+  //cout<<"ruhip:docker.cpp:run function"<<endl;
+  LOG(INFO)<<"ruhip:docker modify";
+  //argv.push_back("-d");
+  /*end */
   if (dockerInfo.privileged()) {
     argv.push_back("--privileged");
   }
@@ -539,12 +544,44 @@ Future<Option<int>> Docker::run(
     }
   }
 
+  std::string sfroad_net="";
   foreach (const Environment::Variable& variable,
            commandInfo.environment().variables()) {
     if (env.isSome() &&
         env.get().find(variable.name()) != env.get().end()) {
       // Skip to avoid duplicate environment variables.
       continue;
+    }
+    /*20170106 ruhip modify*/
+    std::string senvName = variable.name();   
+    if( strcmp(senvName.c_str(),"PORT") == 0 || strcmp(senvName.c_str(),"PORTS") == 0 || strcmp(senvName.c_str(),"PORT_80") == 0 ||
+            strcmp(senvName.c_str(),"MARATHON_APP_ID") == 0 || strcmp(senvName.c_str(),"MARATHON_APP_LABELS") == 0 ||
+            strcmp(senvName.c_str(),"MESOS_TASK_ID") == 0 || strcmp(senvName.c_str(),"MARATHON_APP_RESOURCE_MEM") == 0 || 
+            strcmp(senvName.c_str(),"MARATHON_APP_RESOURCE_CPUS") == 0 || strcmp(senvName.c_str(),"MARATHON_APP_VERSION") == 0 || 
+            strcmp(senvName.c_str(),"MARATHON_APP_DOCKER_IMAGE") == 0 || strcmp(senvName.c_str(),"MARATHON_APP_RESOURCE_DISK") == 0 ||
+            strcmp(senvName.c_str(),"PORT0") == 0 || strcmp(senvName.c_str(),"MARATHON_APP_RESOURCE_GPUS") == 0 || 
+            strcmp(senvName.c_str(),"PORT_10004") == 0 || strcmp(senvName.c_str(),"MESOS_CONTAINER_NAME") == 0 )
+    {
+       LOG(INFO)<<"yes:filter nouse env variable:"<<variable.name();
+       continue;
+    }
+    if( strcmp(senvName.c_str(),"froad_net") == 0 )
+    {
+       sfroad_net = variable.value();
+       continue;
+    }
+    /*
+    if ( senvName.find("froad_volume") != std::string::npos  ){
+        argv.push_back("-v");
+        argv.push_back( variable.value());
+        continue;
+    } */
+    if( strcmp(senvName.c_str(),"froad_volume") == 0 ){
+        foreach(const string& volume,strings::tokenize(variable.value(), ",")){
+            argv.push_back("-v");
+            argv.push_back(volume);
+        }
+        continue;
     }
     argv.push_back("-e");
     argv.push_back(variable.name() + "=" + variable.value());
@@ -554,6 +591,11 @@ Future<Option<int>> Docker::run(
   argv.push_back("MESOS_SANDBOX=" + mappedDirectory);
   argv.push_back("-e");
   argv.push_back("MESOS_CONTAINER_NAME=" + name);
+
+   /*20170105 ruhip test*/
+    argv.push_back("-v");
+    argv.push_back("/var/lib/lxcfs/proc/:/docker/proc/:rw");
+
 
   Option<string> volumeDriver;
   foreach (const Volume& volume, containerInfo.volumes()) {
@@ -620,7 +662,7 @@ Future<Option<int>> Docker::run(
     } else {
       return Failure("Host path or volume source is required");
     }
-
+  
     argv.push_back("-v");
     argv.push_back(volumeConfig);
   }
@@ -646,6 +688,7 @@ Future<Option<int>> Docker::run(
 
   const string& image = dockerInfo.image();
 
+  
   argv.push_back("--net");
   string network;
   switch (dockerInfo.network()) {
@@ -681,7 +724,12 @@ Future<Option<int>> Docker::run(
                             stringify(dockerInfo.network()));
   }
 
+  if( sfroad_net.length() > 0 )
+  {
+     network = sfroad_net;
+  }
   argv.push_back(network);
+  
 
   if (containerInfo.has_hostname()) {
     if (network == "host") {
@@ -858,7 +906,7 @@ Future<Nothing> Docker::stop(
                " " + containerName;
 
   VLOG(1) << "Running " << cmd;
-
+  LOG(INFO)<<"yes:docker stop: Running " << cmd;
   Try<Subprocess> s = subprocess(
       cmd,
       Subprocess::PATH("/dev/null"),
@@ -887,7 +935,7 @@ Future<Nothing> Docker::_stop(
     bool remove)
 {
   Option<int> status = s.status().get();
-
+  LOG(INFO)<<"yes:enter Docker::_stop:remove:"<<remove;
   if (remove) {
     bool force = !status.isSome() || status.get() != 0;
     return docker.rm(containerName, force);
@@ -906,7 +954,7 @@ Future<Nothing> Docker::kill(
     " kill --signal=" + stringify(signal) + " " + containerName;
 
   VLOG(1) << "Running " << cmd;
-
+  LOG(INFO) << "yes:Running " << cmd;
   Try<Subprocess> s = subprocess(
       cmd,
       Subprocess::PATH("/dev/null"),
@@ -931,7 +979,7 @@ Future<Nothing> Docker::rm(
     (force ? " rm -f -v " : " rm -v ") + containerName;
 
   VLOG(1) << "Running " << cmd;
-
+  LOG(INFO)<<"yes:enter Docker rm:Running " << cmd;
   Try<Subprocess> s = subprocess(
       cmd,
       Subprocess::PATH("/dev/null"),
@@ -954,7 +1002,7 @@ Future<Docker::Container> Docker::inspect(
 
   const string cmd =  path + " -H " + socket + " inspect " + containerName;
   _inspect(cmd, promise, retryInterval);
-
+  LOG(INFO)<<"yes:Docker::inspect:"<<cmd;
   return promise->future();
 }
 
@@ -970,7 +1018,7 @@ void Docker::_inspect(
   }
 
   VLOG(1) << "Running " << cmd;
-
+  LOG(INFO)<< "Running " << cmd;
   Try<Subprocess> s = subprocess(
       cmd,
       Subprocess::PATH("/dev/null"),
@@ -1017,6 +1065,8 @@ void Docker::__inspect(
 
     if (retryInterval.isSome()) {
       VLOG(1) << "Retrying inspect with non-zero status code. cmd: '"
+              << cmd << "', interval: " << stringify(retryInterval.get());
+      LOG(INFO)<<"yes:Retrying inspect with non-zero status code. cmd: '"
               << cmd << "', interval: " << stringify(retryInterval.get());
       Clock::timer(retryInterval.get(),
                    [=]() { _inspect(cmd, promise, retryInterval); } );
@@ -1073,6 +1123,9 @@ void Docker::___inspect(
   if (retryInterval.isSome() && !container.get().started) {
     VLOG(1) << "Retrying inspect since container not yet started. cmd: '"
             << cmd << "', interval: " << stringify(retryInterval.get());
+    LOG(INFO)<<"yes:Retrying inspect since container not yet started. cmd: '"
+            << cmd << "', interval: " << stringify(retryInterval.get());
+
     Clock::timer(retryInterval.get(),
                  [=]() { _inspect(cmd, promise, retryInterval); } );
     return;
@@ -1089,7 +1142,7 @@ Future<list<Docker::Container>> Docker::ps(
   string cmd = path + " -H " + socket + (all ? " ps -a" : " ps");
 
   VLOG(1) << "Running " << cmd;
-
+  LOG(INFO)<<"yes:Running:"<<cmd;
   Try<Subprocess> s = subprocess(
       cmd,
       Subprocess::PATH("/dev/null"),
@@ -1231,7 +1284,7 @@ Future<Docker::Image> Docker::pull(
   vector<string> argv;
 
   string dockerImage = image;
-
+  LOG(INFO)<<"yes:Docker::pull:"<<dockerImage;
   // Check if the specified image has a tag. Also split on "/" in case
   // the user specified a registry server (ie: localhost:5000/image)
   // to get the actual image name. If no tag was given we add a
@@ -1257,7 +1310,7 @@ Future<Docker::Image> Docker::pull(
   string cmd = strings::join(" ", argv);
 
   VLOG(1) << "Running " << cmd;
-
+  LOG(INFO)<< "Running " << cmd;
   Try<Subprocess> s = subprocess(
       path,
       argv,
@@ -1332,7 +1385,7 @@ Future<Docker::Image> Docker::__pull(
   string cmd = strings::join(" ", argv);
 
   VLOG(1) << "Running " << cmd;
-
+  LOG(INFO)<< "Running " << cmd;
   // Set the HOME path where docker config file locates.
   Option<string> home;
   if (config.isSome()) {
@@ -1470,7 +1523,7 @@ Future<Docker::Image> Docker::____pull(
     if (image.isError()) {
       return Failure("Unable to create image: " + image.error());
     }
-
+    LOG(INFO)<<"yes:here";
     return image.get();
   }
 
