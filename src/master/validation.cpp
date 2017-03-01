@@ -313,6 +313,12 @@ Option<Error> validate(
       }
       return None();
 
+    case mesos::scheduler::Call::RESTART:
+      if (!call.has_restart()) {
+        return Error("Expecting 'restart' to be present");
+      }
+      return None();
+
     case mesos::scheduler::Call::SHUTDOWN:
       if (!call.has_shutdown()) {
         return Error("Expecting 'shutdown' to be present");

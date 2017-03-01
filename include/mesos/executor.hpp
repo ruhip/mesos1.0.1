@@ -114,6 +114,10 @@ public:
       ExecutorDriver* driver,
       const TaskID& taskId) = 0;
 
+  virtual void restartTask(
+      ExecutorDriver* driver,
+      const TaskID& taskId) = 0;
+
   // Invoked when a framework message has arrived for this executor.
   // These messages are best effort; do not expect a framework message
   // to be retransmitted in any reliable fashion.

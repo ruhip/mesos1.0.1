@@ -227,10 +227,16 @@ Future<Nothing> StatusUpdateManagerProcess::recover(
       // We are only interested in the latest run of the executor!
       const ContainerID& latest = executor.latest.get();
       Option<RunState> run = executor.runs.get(latest);
+      LOG(INFO)<<"yes:latest:"<<latest;
       CHECK_SOME(run);
 
       if (run.get().completed) {
         VLOG(1) << "Skipping recovering updates of"
+                << " executor '" << executor.id
+                << "' of framework " << framework.id
+                << " because its latest run " << latest.value()
+                << " is completed";
+        LOG(INFO) << "k:Skipping recovering updates of"
                 << " executor '" << executor.id
                 << "' of framework " << framework.id
                 << " because its latest run " << latest.value()
@@ -372,7 +378,7 @@ Timeout StatusUpdateManagerProcess::forward(
   CHECK(!paused);
 
   VLOG(1) << "Forwarding update " << update << " to the agent";
-
+  LOG(INFO)<<"yes:Forwarding update " << update << " to the agent";
   // Forward the update.
   forward_(update);
 
@@ -497,6 +503,8 @@ StatusUpdateStream* StatusUpdateManagerProcess::createStatusUpdateStream(
   VLOG(1) << "Creating StatusUpdate stream for task " << taskId
           << " of framework " << frameworkId;
 
+  LOG(INFO) << "Creating StatusUpdate stream for task " << taskId
+          << " of framework " << frameworkId;
   StatusUpdateStream* stream = new StatusUpdateStream(
       taskId, frameworkId, slaveId, flags, checkpoint, executorId, containerId);
 
@@ -528,7 +536,9 @@ void StatusUpdateManagerProcess::cleanupStatusUpdateStream(
   VLOG(1) << "Cleaning up status update stream"
           << " for task " << taskId
           << " of framework " << frameworkId;
-
+  LOG(INFO)<<"Cleaning up status update stream"
+          << " for task " << taskId
+          << " of framework " << frameworkId;
   CHECK(streams.contains(frameworkId))
     << "Cannot find the status update streams for framework " << frameworkId;
 

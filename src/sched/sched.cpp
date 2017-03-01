@@ -1252,6 +1252,27 @@ protected:
     send(master.get().pid(), call);
   }
 
+  /*froad*/
+   void restartTask(const TaskID& taskId)
+  {
+    if (!connected) {
+      VLOG(1) << "Ignoring kill task message as master is disconnected";
+      return;
+    }
+
+    Call call;
+
+    CHECK(framework.has_id());
+    call.mutable_framework_id()->CopyFrom(framework.id());
+    call.set_type(Call::RESTART);
+
+    Call::Restart* restart = call.mutable_restart();
+    restart->mutable_task_id()->CopyFrom(taskId);
+
+    CHECK_SOME(master);
+    send(master.get().pid(), call);
+  }
+
   void requestResources(const vector<Request>& requests)
   {
     if (!connected) {
@@ -2085,6 +2106,21 @@ Status MesosSchedulerDriver::killTask(const TaskID& taskId)
   }
 }
 
+
+Status MesosSchedulerDriver::restartTask(const TaskID& taskId)
+{
+  synchronized (mutex) {
+    if (status != DRIVER_RUNNING) {
+      return status;
+    }
+
+    CHECK(process != nullptr);
+
+    dispatch(process, &SchedulerProcess::restartTask, taskId);
+
+    return status;
+  }
+}
 
 Status MesosSchedulerDriver::launchTasks(
     const OfferID& offerId,

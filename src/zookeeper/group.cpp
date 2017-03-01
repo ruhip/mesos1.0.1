@@ -150,10 +150,11 @@ void GroupProcess::initialize()
 
 void GroupProcess::startConnection()
 {
+  LOG(INFO)<<"k:enter GroupProcess::startConnection()";
   watcher = new ProcessWatcher<GroupProcess>(self());
   zk = new ZooKeeper(servers, sessionTimeout, watcher);
   state = CONNECTING;
-
+  LOG(INFO)<<"k:state = CONNECTING;";
   // If the connection is not established within the session timeout,
   // close the ZooKeeper handle and create a new one. This is
   // important because the ZooKeeper 3.4 client libraries don't try to
@@ -277,14 +278,16 @@ Future<Option<string>> GroupProcess::data(const Group::Membership& membership)
 Future<set<Group::Membership>> GroupProcess::watch(
     const set<Group::Membership>& expected)
 {
+  LOG(INFO)<<"k:enter GroupProcess::watch";
   if (error.isSome()) {
     return Failure(error.get());
   } else if (state != READY) {
     Watch* watch = new Watch(expected);
     pending.watches.push(watch);
+    LOG(INFO)<<"k:expected.id:";//<<expected.get().id();
     return watch->promise.future();
   }
-
+  LOG(INFO)<<"k:state == READY";
   // To guarantee causality, we must invalidate our cache of
   // memberships after any updates are made to the group (i.e., joins
   // and cancels). This is because a client that just learned of a
@@ -304,7 +307,7 @@ Future<set<Group::Membership>> GroupProcess::watch(
       return Failure(cached.error());
     } else if (!cached.get()) {
       CHECK_NONE(memberships);
-
+      LOG(INFO)<<"k:!cached.get()";
       // Try again later.
       if (!retrying) {
         delay(RETRY_INTERVAL, self(), &GroupProcess::retry, RETRY_INTERVAL);
@@ -747,6 +750,7 @@ Try<bool> GroupProcess::cache()
   hashmap<int32_t, Option<string>> sequences;
 
   foreach (const string& result, results) {
+    LOG(INFO)<<"k:result:"<<result;
     vector<string> tokens = strings::tokenize(result, "_");
     Option<string> label = None();
     if (tokens.size() > 1) {
@@ -1032,6 +1036,7 @@ Future<Group::Membership> Group::join(
     const string& data,
     const Option<string>& label)
 {
+  LOG(INFO)<<"k:enter Group::join";
   return dispatch(process, &GroupProcess::join, data, label);
 }
 

@@ -323,6 +323,7 @@ Future<bool> ComposingContainerizerProcess::launch(
     const PID<Slave>& slavePid,
     bool checkpoint)
 {
+  LOG(INFO)<<"yes:here";
   if (containers_.contains(containerId)) {
     return Failure("Container '" + containerId.value() +
                    "' is already launching");
@@ -448,7 +449,7 @@ Future<bool> ComposingContainerizerProcess::launch(
     return Failure("Container '" + stringify(containerId) +
                    "' is already launching");
   }
-
+  LOG(INFO)<<"yes:enter ComposingContainerizerProcess::launch";
   // Try each containerizer. If none of them handle the
   // TaskInfo/ExecutorInfo then return a Failure.
   vector<Containerizer*>::iterator containerizer = containerizers_.begin();

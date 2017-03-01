@@ -226,7 +226,7 @@ void ZooKeeperMasterDetectorProcess::fetched(
   } else if (label.isSome() &&
              label.get() == internal::master::MASTER_INFO_JSON_LABEL) {
     Try<JSON::Object> object = JSON::parse<JSON::Object>(data.get().get());
-
+    LOG(INFO)<<"yes:in here";
     if (object.isError()) {
       leader = None();
       failPromises(

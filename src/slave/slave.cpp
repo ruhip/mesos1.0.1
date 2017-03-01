@@ -564,6 +564,10 @@ void Slave::initialize()
   install<KillTaskMessage>(
       &Slave::killTask);
 
+ 
+  install<RestartTaskMessage>(
+      &Slave::restartTask);
+
   install<ShutdownExecutorMessage>(
       &Slave::shutdownExecutor,
       &ShutdownExecutorMessage::framework_id,
@@ -2059,10 +2063,30 @@ void Slave::runTasks(
 
     LOG(INFO) << "Sending queued task '" << task.task_id()
               << "' to executor " << *executor;
+  
+   /* add random_macaddress */ 
+/* 
+    Environment_Variable* env =
+    task.mutable_command()->mmutable_environment()->add_variables();
 
+    env->set_name("LIBPROCESS_IP");
+    env->set_value("0.0.0.0"); 
+*/
+   //task.mutable_command()->add_arguments("random macaddr");
+   //task.mutable_command()->set_value("random macaddr");
     RunTaskMessage message;
     message.mutable_framework()->MergeFrom(framework->info);
     message.mutable_task()->MergeFrom(task);
+
+/*
+    Environment_Variable* env =
+    message.mutable_task()->mutable_command()->mmutable_environment()->add_variables();
+
+    env->set_name("LIBPROCESS_IP");
+    env->set_value("0.0.0.0");
+*/
+   //message.mutable_task()->mutable_command()->set_value("random macaddr");
+   // message.mutable_task()->mutable_command()->add_arguments("random macaddr");
 
     // Note that 0.23.x executors require the 'pid' to be set
     // to decode the message, but do not use the field.
@@ -2072,6 +2096,149 @@ void Slave::runTasks(
   }
 }
 
+
+
+
+/*froad*/
+void Slave::restartTask(
+    const UPID& from,
+    const RestartTaskMessage& restartTaskMessage)
+ {
+ 
+  const FrameworkID& frameworkId = restartTaskMessage.framework_id();
+  const TaskID& taskId1 = restartTaskMessage.task_id();
+  
+   LOG(INFO) << "Asked to restart task " << taskId1
+            << " of framework " << frameworkId;
+ /*
+   string strTaskid = taskId1.value();
+  int nFind = taskId1.value().rfind("_restart");
+  if( nFind > 0 )
+  {
+      strTaskid = strTaskid.substr(0,nFind);
+      nFind = strTaskid.find("\"");
+        if ( nFind > 0 )
+        {
+            strTaskid = strTaskid.substr(nFind+1, strTaskid.length()-nFind);
+            strTaskid = strTaskid.substr(0, strTaskid.length() - 2);
+        }
+  }
+  TaskID sTaskid;
+  sTaskid.set_value(strTaskid);
+*/
+  const TaskID& taskId = restartTaskMessage.task_id();
+  
+ 
+  CHECK(state == RECOVERING || state == DISCONNECTED ||
+        state == RUNNING || state == TERMINATING)
+    << state;
+
+  // TODO(bmahler): Also ignore if we're DISCONNECTED.
+  if (state == RECOVERING || state == TERMINATING) {
+    LOG(WARNING) << "Cannot restart task " << taskId
+                 << " of framework " << frameworkId
+                 << " because the agent is " << state;
+    // TODO(vinod): Consider sending a TASK_LOST here.
+    // Currently it is tricky because 'statusUpdate()'
+    // ignores updates for unknown frameworks.
+    return;
+  }
+
+  Framework* framework = getFramework(frameworkId);
+  if (framework == nullptr) {
+    LOG(WARNING) << "Ignoring restart task " << taskId
+                 << " of framework " << frameworkId
+                 << " because no such framework is running";
+    return;
+  }
+
+  CHECK(framework->state == Framework::RUNNING ||
+        framework->state == Framework::TERMINATING)
+    << framework->state;
+
+  // We don't send a status update here because a terminating
+  // framework cannot send acknowledgements.
+  if (framework->state == Framework::TERMINATING) {
+    LOG(WARNING) << "Ignoring restart task " << taskId
+                 << " of framework " << frameworkId
+                 << " because the framework is terminating";
+    return;
+  }
+
+  foreachkey (const ExecutorID& executorId, framework->pending) {
+    if (framework->pending[executorId].contains(taskId)) {
+      LOG(WARNING) << "restarting task " << taskId
+                   << " of framework " << frameworkId
+                   << " before it was launched";
+
+      return;
+    }
+  }
+
+  Executor* executor = framework->getExecutor(taskId);
+  if (executor == nullptr) {
+    LOG(WARNING) << "Cannot restart task " << taskId
+                 << " of framework " << frameworkId
+                 << " because no corresponding executor is running";
+    // We send a TASK_LOST update because this task has never
+    // been launched on this slave.
+
+    return;
+  }
+
+  switch (executor->state) {
+    case Executor::REGISTERING: {
+      LOG(WARNING) << "Transitioning the state of task " << taskId
+                   << " of framework " << frameworkId
+                   << " to TASK_KILED because the executor is not registered";
+
+      // The executor hasn't registered yet.
+
+      break;
+    }
+    case Executor::TERMINATING:
+      LOG(WARNING) << "Ignoring restart task " << taskId
+                   << " because the executor " << *executor
+                   << " is terminating";
+      break;
+    case Executor::TERMINATED:
+      LOG(WARNING) << "Ignoring restart task " << taskId
+                   << " because the executor " << *executor
+                   << " is terminated";
+      break;
+    case Executor::RUNNING: {
+      if (executor->queuedTasks.contains(taskId)) {
+        // This is the case where the task has not yet been sent to
+        // the executor (e.g., waiting for containerizer update to
+        // finish).
+
+      } else {
+        // Send a message to the executor and wait for
+        // it to send us a status update.
+        RestartTaskMessage message;
+        message.mutable_framework_id()->MergeFrom(frameworkId);
+        message.mutable_task_id()->MergeFrom(taskId);
+        if (restartTaskMessage.has_kill_policy()) {
+          message.mutable_kill_policy()->MergeFrom(
+              restartTaskMessage.kill_policy());
+        }
+
+      LOG(INFO) << "yes:send RestartTaskMessage to  executor " << *executor;
+				 
+				 
+        executor->send(message);
+      }
+      break;
+    }
+    default:
+      LOG(FATAL) << "Executor " << *executor << " is in unexpected state "
+                 << executor->state;
+      break;
+  }
+  
+  
+   return;
+ }
 
 void Slave::killTask(
     const UPID& from,
@@ -2087,8 +2254,22 @@ void Slave::killTask(
   const FrameworkID& frameworkId = killTaskMessage.framework_id();
   const TaskID& taskId = killTaskMessage.task_id();
 
-  LOG(INFO) << "Asked to kill task " << taskId
+  LOG(INFO) << "Asked to kill task " << taskId<<",value:"<<taskId.value()
             << " of framework " << frameworkId;
+
+            
+  /*froad*/
+  /*
+  LOG(INFO) <<"yes:find_restart:"<<taskId.value().rfind("_restart");
+  int nFind = taskId.value().rfind("_restart");
+  //if( taskId.value().rfind("_restart") > 0 )
+  if( nFind > 0 )
+  {
+      LOG(INFO) << "Asked to kill task " << taskId<<",nfind:"<<nFind;
+      restartTask(from,killTaskMessage);
+      return;
+  }
+*/
 
   CHECK(state == RECOVERING || state == DISCONNECTED ||
         state == RUNNING || state == TERMINATING)

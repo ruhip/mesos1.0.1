@@ -81,9 +81,12 @@ public:
       const string& sandboxDirectory,
       const string& mappedDirectory,
       const Duration& shutdownGracePeriod,
+      const Duration& _inspectDockerPeriod,
+      const int& _inspectMaxnums,
       const string& healthCheckDir,
       const map<string, string>& taskEnvironment)
     : killed(false),
+      restarted(false),
       killedByHealthCheck(false),
       terminated(false),
       healthPid(-1),
@@ -93,9 +96,12 @@ public:
       sandboxDirectory(sandboxDirectory),
       mappedDirectory(mappedDirectory),
       shutdownGracePeriod(shutdownGracePeriod),
+      inspectDockerPeriod(_inspectDockerPeriod),
+      inspectMaxnums(_inspectMaxnums),
       taskEnvironment(taskEnvironment),
       stop(Nothing()),
-      inspect(Nothing()) {}
+      inspect(Nothing()),
+      statusinspect(Nothing()) {}
 
   virtual ~DockerExecutorProcess() {}
 
@@ -124,6 +130,7 @@ public:
 
   void launchTask(ExecutorDriver* driver, const TaskInfo& task)
   {
+    cout<<"enter launchTask"<<endl;
     if (run.isSome()) {
       TaskStatus status;
       status.mutable_task_id()->CopyFrom(task.task_id());
@@ -144,7 +151,7 @@ public:
     }
 
     cout << "Starting task " << taskId.get() << endl;
-
+    LOG(INFO) << "yes:Starting task " << taskId.get();
     CHECK(task.has_container());
     CHECK(task.has_command());
 
@@ -167,9 +174,11 @@ public:
         None(), // No extra devices.
         Subprocess::FD(STDOUT_FILENO),
         Subprocess::FD(STDERR_FILENO));
-
+    cout<<"yes:1"<<endl;
+    //cout<<"run:"<<run.get()<<endl;
     run->onAny(defer(self(), &Self::reaped, lambda::_1));
-
+    cout<<"yes:2"<<endl;
+    LOG(INFO) << "froad:ready inspect.";
     // Delay sending TASK_RUNNING status update until we receive
     // inspect output. Note that we store a future that completes
     // after the sending of the running update. This allows us to
@@ -177,17 +186,20 @@ public:
     // update (see `reaped()`).
     inspect = docker->inspect(containerName, DOCKER_INSPECT_DELAY)
       .then(defer(self(), [=](const Docker::Container& container) {
+        LOG(INFO) << "froad:inspect return.";
         if (!killed) {
           TaskStatus status;
           status.mutable_task_id()->CopyFrom(taskId.get());
           status.set_state(TASK_RUNNING);
           status.set_data(container.output);
+          cout<<"yes:3 TASK_RUNNING"<<endl;
+          LOG(INFO) << "froad:status.set_data:"<<container.output;
           if (container.ipAddress.isSome()) {
             // TODO(karya): Deprecated -- Remove after 0.25.0 has shipped.
             Label* label = status.mutable_labels()->add_labels();
             label->set_key("Docker.NetworkSettings.IPAddress");
             label->set_value(container.ipAddress.get());
-
+            cout<<"yes:4"<<endl;
             NetworkInfo* networkInfo =
               status.mutable_container_status()->add_network_infos();
 
@@ -204,12 +216,15 @@ public:
 
             containerNetworkInfo = *networkInfo;
           }
+          LOG(INFO) <<"froad:inspect ok,so driver->sendStatusUpdate(status);";
+          cout<<"yes:5 now driver->sendStatusUpdate(status)"<<endl;
           driver->sendStatusUpdate(status);
         }
-
+        LOG(INFO) <<"froad:inspect return Nothing.";
         return Nothing();
       }));
-
+    cout<<"yes:6 here"<<endl;
+    LOG(INFO) <<"froad:inspect ready OnFailed";
     inspect.onFailed(defer(self(), [=](const string& failure) {
       cerr << "Failed to inspect container '" << containerName << "'"
            << ": " << failure << endl;
@@ -226,7 +241,7 @@ public:
   void killTask(ExecutorDriver* driver, const TaskID& taskId)
   {
     cout << "Received killTask for task " << taskId.value() << endl;
-
+    LOG(INFO) << "yes:Received killTask for task " << taskId.value();
     // Using shutdown grace period as a default is backwards compatible
     // with the `stop_timeout` flag, deprecated in 1.0.
     Duration gracePeriod = shutdownGracePeriod;
@@ -237,6 +252,22 @@ public:
 
     killTask(driver, taskId, gracePeriod);
   }
+
+    void restartTask(ExecutorDriver* driver, const TaskID& taskId)
+  {
+    LOG(INFO) << "Received restartTask for task " << taskId.value() << endl;
+
+    // Using shutdown grace period as a default is backwards compatible
+    // with the `stop_timeout` flag, deprecated in 1.0.
+    Duration gracePeriod = shutdownGracePeriod;
+
+    if (killPolicy.isSome() && killPolicy->has_grace_period()) {
+      gracePeriod = Nanoseconds(killPolicy->grace_period().nanoseconds());
+    }
+
+    restartTask(driver, taskId, gracePeriod);
+  }
+
 
   void frameworkMessage(ExecutorDriver* driver, const string& data) {}
 
@@ -312,6 +343,66 @@ protected:
   }
 
 private:
+
+
+
+void restartTask(
+      ExecutorDriver* driver,
+      const TaskID& _taskId,
+      const Duration& gracePeriod)
+  {
+    LOG(INFO)<<"froad:enter restartTask";
+    if (terminated) {
+      return;
+    }
+
+    // TODO(alexr): If a kill is in progress, consider adjusting
+    // the grace period if a new one is provided.
+
+    // Issue the kill signal if the container is running
+    // and we haven't killed it yet.
+    if (run.isSome() && !killed) {
+      // We have to issue the kill after 'docker inspect' has
+      // completed, otherwise we may race with 'docker run'
+      // and docker may not know about the container. Note
+      // that we postpone setting `killed` because we don't
+      // want to send TASK_KILLED without having actually
+      // issued the kill.
+      inspect
+        .onAny(defer(self(), &Self::_restartTask, _taskId, gracePeriod));
+    }
+  }
+
+
+  void _restartTask(const TaskID& taskId_, const Duration& gracePeriod)
+  {
+    CHECK_SOME(driver);
+    CHECK_SOME(frameworkInfo);
+    CHECK_SOME(taskId);
+    CHECK_EQ(taskId_, taskId.get());
+
+    LOG(INFO)<<"froad:enter _restartTask";
+
+    if (!terminated && !killed) {
+      // Because we rely on `killed` to determine whether
+      // to send TASK_KILLED, we set `killed` only once the
+      // kill is issued. If we set it earlier we're more
+      // likely to send a TASK_KILLED without having ever
+      // signaled the container. Note that in general it's
+      // a race between signaling and the container
+      // terminating with a non-zero exit status.
+      // TODO(bmahler): Replace this with 'docker kill' so
+      // that we can adjust the grace period in the case of
+      // a `KillPolicy` override.
+	  
+     LOG(INFO)<<"froad:ready docker->restart:"<<containerName;
+	  restarted = true;
+      restart = docker->restart(containerName, gracePeriod,false);
+    }
+  }
+
+
+
   void killTask(
       ExecutorDriver* driver,
       const TaskID& _taskId,
@@ -344,6 +435,7 @@ private:
     // information while the task is being killed (consider a
     // task that takes 30 minutes to be cleanly killed).
     if (healthPid != -1) {
+      LOG(INFO)<<"yes:killtree";
       os::killtree(healthPid, SIGKILL);
       healthPid = -1;
     }
@@ -370,6 +462,7 @@ private:
       if (protobuf::frameworkHasCapability(
               frameworkInfo.get(),
               FrameworkInfo::Capability::TASK_KILLING_STATE)) {
+        LOG(INFO)<<"yes:Send TASK_KILLING if the framework can handle it";
         TaskStatus status;
         status.mutable_task_id()->CopyFrom(taskId.get());
         status.set_state(TASK_KILLING);
@@ -379,14 +472,33 @@ private:
       // TODO(bmahler): Replace this with 'docker kill' so
       // that we can adjust the grace period in the case of
       // a `KillPolicy` override.
+      LOG(INFO)<<"yes:ready docker->stop:"<<gracePeriod;
       stop = docker->stop(containerName, gracePeriod);
+      /*
+       stop.onAny([=](const Future<Nothing>&) {
+      docker->killtask = true;
+      return;
+      }); 
+     */
+       Future<Option<int>> run(3);
+       stop.onAny(defer(self(), &Self::reaped2, run));
+     //stop = docker->stop(containerName, gracePeriod,true);
     }
   }
 
-  void reaped(const Future<Option<int>>& run)
+  void reaped2(const Future<Option<int>>& run)
   {
-    terminated = true;
+    LOG(INFO)<<"yes:reaped2"<<endl;
 
+   if( restarted )
+   {
+      // LOG(INFO)<<"fraod:because restarted,so return";
+       restarted = false;
+      // return ;
+   }
+
+    terminated = true;
+    LOG(INFO)<<"yes:1 reaped";
     // In case the stop is stuck, discard it.
     stop.discard();
 
@@ -394,12 +506,48 @@ private:
     // the TASK_RUNNING status update.
     inspect
       .onAny(defer(self(), &Self::_reaped, run));
-
+    LOG(INFO)<<"froad:inspect :2";
     // If the inspect takes too long we discard it to ensure we
     // don't wait forever, however in this case there may be no
     // TASK_RUNNING update.
     inspect
       .after(DOCKER_INSPECT_TIMEOUT, [=](const Future<Nothing>&) {
+
+        LOG(INFO) <<"froad:in reaped now inspect.discard();";
+        inspect.discard();
+        return inspect;
+      });
+  }
+
+  void reaped(const Future<Option<int>>& run)
+  {
+    LOG(INFO)<<"yes:reaped"<<endl;
+    LOG(INFO)<<"froad:now not use";
+   return;
+   if( restarted )
+   {
+       LOG(INFO)<<"fraod:because restarted,so return";
+       restarted = false;
+       return ;
+   }   
+
+    terminated = true;
+    LOG(INFO)<<"yes:1 reaped";
+    // In case the stop is stuck, discard it.
+    stop.discard();
+
+    // We wait for inspect to finish in order to ensure we send
+    // the TASK_RUNNING status update.
+    inspect
+      .onAny(defer(self(), &Self::_reaped, run));
+    LOG(INFO)<<"froad:inspect :2";
+    // If the inspect takes too long we discard it to ensure we
+    // don't wait forever, however in this case there may be no
+    // TASK_RUNNING update.
+    inspect
+      .after(DOCKER_INSPECT_TIMEOUT, [=](const Future<Nothing>&) {
+       
+        LOG(INFO) <<"froad:in reaped now inspect.discard();";
         inspect.discard();
         return inspect;
       });
@@ -409,21 +557,24 @@ private:
   {
     TaskState state;
     string message;
-
+    LOG(INFO)<<"froad:yes enter in  _reaped";
     if (!run.isReady()) {
+      LOG(INFO)<<"yes:2 !run.isReady()";
       // TODO(bmahler): Include the run command in the message.
       state = TASK_FAILED;
       message = "Failed to run docker container: " +
           (run.isFailed() ? run.failure() : "discarded");
     } else if (run->isNone()) {
+      LOG(INFO)<<"yes:3 run->isNone()";
       state = TASK_FAILED;
       message = "Failed to get exit status of container";
     } else {
       int status = run->get();
       CHECK(WIFEXITED(status) || WIFSIGNALED(status)) << status;
-
+      LOG(INFO)<<"yes:4 here";
       if (WIFEXITED(status) && WEXITSTATUS(status) == 0) {
         state = TASK_FINISHED;
+        LOG(INFO)<<"yes:5 state = TASK_FINISHED ";
       } else if (killed) {
         // Send TASK_KILLED if the task was killed as a result of
         // kill() or shutdown(). Note that in general there is a
@@ -439,6 +590,7 @@ private:
       }
 
       message = "Container " + WSTRINGIFY(status);
+      LOG(INFO)<<"yes:5:"<<message;
     }
 
     CHECK_SOME(taskId);
@@ -448,23 +600,44 @@ private:
     taskStatus.set_state(state);
     taskStatus.set_message(message);
     if (killed && killedByHealthCheck) {
+      LOG(INFO)<<"yes:6 taskStatus.set_healthy(false)";
       taskStatus.set_healthy(false);
     }
 
     CHECK_SOME(driver);
+    LOG(INFO)<<"yes:7 driver.get()->sendStatusUpdate(taskStatus)";
+    //os::sleep(Seconds(10));
     driver.get()->sendStatusUpdate(taskStatus);
-
+    LOG(INFO)<<"yes:7 after driver.get()->sendStatusUpdate(taskStatus)";
     // A hack for now ... but we need to wait until the status update
     // is sent to the slave before we shut ourselves down.
     // TODO(tnachen): Remove this hack and also the same hack in the
     // command executor when we have the new HTTP APIs to wait until
     // an ack.
     os::sleep(Seconds(1));
+    LOG(INFO)<<"yes:driver.get()->stop()";
     driver.get()->stop();
+  }
+
+  /*froad*/
+  void dockerstatusCheck(const string& containerName, const TaskInfo& task)
+  {
+     statusinspect = docker->statusinspect(inspectMaxnums,containerName, inspectDockerPeriod)
+      .then(defer(self(), [=](const string& status) {
+        LOG(INFO) << "froad:dockerstatusCheck return:"<<status;
+     
+       Future<Option<int>> run(0);
+        reaped2(run);
+   
+        LOG(INFO) <<"froad:dockerstatusCheck return Nothing.";
+        return Nothing();
+      }));
   }
 
   void launchHealthCheck(const string& containerName, const TaskInfo& task)
   {
+    dockerstatusCheck(containerName,task);
+    LOG(INFO)<<"yes:launchHealthCheck";
     // Bail out early if we have been already killed or if the task has no
     // associated health checks.
     //
@@ -472,7 +645,9 @@ private:
     // already been killed to ensure that tasks are health checked
     // while in their kill grace period.
     if (killed || !task.has_health_check()) {
-      return;
+        cout<<"yes:killed || !task.has_health_check()"<<endl;
+        LOG(INFO)<<"yes:yes:killed || !task.has_health_check()"<<endl;
+        return;
     }
 
     HealthCheck healthCheck = task.health_check();
@@ -565,8 +740,12 @@ private:
   // TODO(alexr): Introduce a state enum and document transitions,
   // see MESOS-5252.
   bool killed;
+  bool restarted;
   bool killedByHealthCheck;
   bool terminated;
+ //gou zao han su chu shi hua
+ // bool restarted;
+
 
   pid_t healthPid;
   string healthCheckDir;
@@ -575,12 +754,17 @@ private:
   string sandboxDirectory;
   string mappedDirectory;
   Duration shutdownGracePeriod;
+  Duration inspectDockerPeriod;
+  int inspectMaxnums;
   map<string, string> taskEnvironment;
 
   Option<KillPolicy> killPolicy;
   Option<Future<Option<int>>> run;
   Future<Nothing> stop;
+  //Future<Nothing> restart;
+  Option<Future<Option<int>>> restart;
   Future<Nothing> inspect;
+  Future<Nothing> statusinspect;
   Option<ExecutorDriver*> driver;
   Option<FrameworkInfo> frameworkInfo;
   Option<TaskID> taskId;
@@ -597,6 +781,8 @@ public:
       const string& sandboxDirectory,
       const string& mappedDirectory,
       const Duration& shutdownGracePeriod,
+      const Duration& inspectDockerPeriod,
+      const int& inspectMaxnums,
       const string& healthCheckDir,
       const map<string, string>& taskEnvironment)
   {
@@ -606,6 +792,8 @@ public:
         sandboxDirectory,
         mappedDirectory,
         shutdownGracePeriod,
+        inspectDockerPeriod,
+        inspectMaxnums,
         healthCheckDir,
         taskEnvironment));
 
@@ -655,6 +843,11 @@ public:
   virtual void killTask(ExecutorDriver* driver, const TaskID& taskId)
   {
     dispatch(process.get(), &DockerExecutorProcess::killTask, driver, taskId);
+  }
+
+  virtual void restartTask(ExecutorDriver* driver, const TaskID& taskId)
+  {
+    dispatch(process.get(), &DockerExecutorProcess::restartTask, driver, taskId);
   }
 
   virtual void frameworkMessage(ExecutorDriver* driver, const string& data)
@@ -792,6 +985,22 @@ int main(int argc, char** argv)
       flags.stop_timeout.get() > shutdownGracePeriod) {
     shutdownGracePeriod = flags.stop_timeout.get();
   }
+ 
+  Duration inspectDockerPeriod = Seconds(5);
+  if( flags.docker_inspect_period.isSome() )
+  {
+      inspectDockerPeriod = flags.docker_inspect_period.get();
+  }
+  int inspectDockerTimes = 5;
+  
+  if( flags.docker_inspect_times.isSome() )
+  {
+      Try<int> result = numify<int>( flags.docker_inspect_times.get().c_str());
+      if( result.isSome() && result.get() > 0 )
+      {
+         inspectDockerTimes = result.get();
+      }
+  } 
 
   if (flags.launcher_dir.isNone()) {
     cerr << flags.usage("Missing required option --launcher_dir") << endl;
@@ -817,6 +1026,8 @@ int main(int argc, char** argv)
       flags.sandbox_directory.get(),
       flags.mapped_directory.get(),
       shutdownGracePeriod,
+      inspectDockerPeriod,
+      inspectDockerTimes,
       flags.launcher_dir.get(),
       taskEnvironment);
 

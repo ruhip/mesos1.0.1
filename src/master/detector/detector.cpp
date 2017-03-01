@@ -67,6 +67,7 @@ Try<MasterDetector*> MasterDetector::create(
       return Error(
           "Expecting a (chroot) path for ZooKeeper ('/' is not supported)");
     }
+    LOG(INFO)<<"k:ZooKeeperMasterDetector:"<<url.get();
     return new ZooKeeperMasterDetector(url.get());
   } else if (strings::startsWith(zk, "file://")) {
     // Load the configuration out of a file. While Mesos and related

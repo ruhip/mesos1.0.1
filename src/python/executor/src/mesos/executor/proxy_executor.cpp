@@ -228,6 +228,40 @@ cleanup:
 }
 
 
+
+void ProxyExecutor::restartTask(ExecutorDriver* driver,
+                             const TaskID& taskId)
+{
+  InterpreterLock lock;
+
+  PyObject* taskIdObj = nullptr;
+  PyObject* res = nullptr;
+
+  taskIdObj = createPythonProtobuf(taskId, "TaskID");
+  if (taskIdObj == nullptr) {
+    goto cleanup; // createPythonProtobuf will have set an exception.
+  }
+
+  res = PyObject_CallMethod(impl->pythonExecutor,
+                            (char*) "restartTask",
+                            (char*) "OO",
+                            impl,
+                            taskIdObj);
+  if (res == nullptr) {
+    cerr << "Failed to call executor's restartTask" << endl;
+    goto cleanup;
+  }
+
+cleanup:
+  if (PyErr_Occurred()) {
+    PyErr_Print();
+    driver->abort();
+  }
+  Py_XDECREF(taskIdObj);
+  Py_XDECREF(res);
+}
+
+
 void ProxyExecutor::shutdown(ExecutorDriver* driver)
 {
   InterpreterLock lock;

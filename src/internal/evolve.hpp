@@ -120,6 +120,7 @@ v1::executor::Event evolve(const mesos::executor::Event& event);
 v1::executor::Event evolve(const ExecutorRegisteredMessage& message);
 v1::executor::Event evolve(const FrameworkToExecutorMessage& message);
 v1::executor::Event evolve(const KillTaskMessage& message);
+v1::executor::Event evolve(const RestartTaskMessage& message);
 v1::executor::Event evolve(const RunTaskMessage& message);
 v1::executor::Event evolve(const StatusUpdateAcknowledgementMessage& message);
 v1::executor::Event evolve(const ShutdownExecutorMessage& message);

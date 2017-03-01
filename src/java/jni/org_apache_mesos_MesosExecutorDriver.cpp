@@ -48,6 +48,10 @@ public:
   virtual void disconnected(ExecutorDriver* driver);
   virtual void launchTask(ExecutorDriver* driver, const TaskInfo& task);
   virtual void killTask(ExecutorDriver* driver, const TaskID& taskId);
+
+  /*froad*/
+  virtual void restartTask(ExecutorDriver* driver, const TaskID& taskId);
+ 
   virtual void frameworkMessage(ExecutorDriver* driver, const string& data);
   virtual void shutdown(ExecutorDriver* driver);
   virtual void error(ExecutorDriver* driver, const string& message);
@@ -238,6 +242,41 @@ void JNIExecutor::killTask(ExecutorDriver* driver, const TaskID& taskId)
   jvm->DetachCurrentThread();
 }
 
+
+/*froad*/
+void JNIExecutor::restartTask(ExecutorDriver* driver, const TaskID& taskId)
+{
+  jvm->AttachCurrentThread(JNIENV_CAST(&env), nullptr);
+
+  jclass clazz = env->GetObjectClass(jdriver);
+
+  jfieldID executor = env->GetFieldID(clazz, "executor", "Lorg/apache/mesos/Executor;");
+  jobject jexecutor = env->GetObjectField(jdriver, executor);
+
+  clazz = env->GetObjectClass(jexecutor);
+
+  // executor.restartTask(driver, taskId);
+  jmethodID restartTask =
+    env->GetMethodID(clazz, "restartTask",
+		     "(Lorg/apache/mesos/ExecutorDriver;"
+		     "Lorg/apache/mesos/Protos$TaskID;)V");
+
+  jobject jtaskId = convert<TaskID>(env, taskId);
+
+  env->ExceptionClear();
+
+  env->CallVoidMethod(jexecutor, restartTask, jdriver, jtaskId);
+
+  if (env->ExceptionCheck()) {
+    env->ExceptionDescribe();
+    env->ExceptionClear();
+    jvm->DetachCurrentThread();
+    driver->abort();
+    return;
+  }
+
+  jvm->DetachCurrentThread();
+}
 
 void JNIExecutor::frameworkMessage(ExecutorDriver* driver, const string& data)
 {

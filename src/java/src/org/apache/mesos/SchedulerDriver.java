@@ -195,6 +195,9 @@ public interface SchedulerDriver {
    */
   Status killTask(TaskID taskId);
 
+  /*froad*/
+  Status restartTask(TaskID taskId);
+
   /**
    * Accepts the given offers and performs a sequence of operations on
    * those accepted offers. See Offer.Operation in mesos.proto for the

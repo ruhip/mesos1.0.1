@@ -883,6 +883,10 @@ Future<Response> Master::Http::scheduler(
     case scheduler::Call::KILL:
       master->kill(framework, call.kill());
       return Accepted();
+   
+    case scheduler::Call::RESTART:
+      master->restart(framework, call.restart());
+      return Accepted();
 
     case scheduler::Call::SHUTDOWN:
       master->shutdown(framework, call.shutdown());

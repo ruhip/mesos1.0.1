@@ -43,6 +43,7 @@ using std::string;
 
 int main(int argc, char** argv)
 {
+  cout<<"yes:oh enter cli resolve main"<<endl;
   flags::FlagsBase flags;
   flags.setUsageMessage("Usage: " + Path(argv[0]).basename() + " <master>");
 

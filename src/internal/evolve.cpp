@@ -288,7 +288,8 @@ v1::scheduler::Event evolve(const RescindInverseOfferMessage& message)
 
 
 v1::scheduler::Event evolve(const StatusUpdateMessage& message)
-{
+{ 
+  LOG(INFO)<<"yes:v1::scheduler::Event evolve(const StatusUpdateMessage& message)";
   v1::scheduler::Event event;
   event.set_type(v1::scheduler::Event::UPDATE);
 
@@ -387,6 +388,22 @@ v1::executor::Event evolve(const mesos::executor::Event& event)
 
 
 v1::executor::Event evolve(const KillTaskMessage& message)
+{
+  v1::executor::Event event;
+  event.set_type(v1::executor::Event::KILL);
+
+  v1::executor::Event::Kill* kill = event.mutable_kill();
+
+  kill->mutable_task_id()->CopyFrom(evolve(message.task_id()));
+
+  if (message.has_kill_policy()) {
+    kill->mutable_kill_policy()->CopyFrom(evolve(message.kill_policy()));
+  }
+
+  return event;
+}
+/*froad*/
+v1::executor::Event evolve(const RestartTaskMessage& message)
 {
   v1::executor::Event event;
   event.set_type(v1::executor::Event::KILL);

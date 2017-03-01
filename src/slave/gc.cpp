@@ -166,6 +166,7 @@ void GarbageCollectorProcess::remove(const Timeout& removalTime)
 void GarbageCollectorProcess::prune(const Duration& d)
 {
   foreach (const Timeout& removalTime, paths.keys()) {
+    //LOG(INFO)<<"yes:removalTime.remaining,d:"<<removalTime.remaining()<<","<<d;
     if (removalTime.remaining() <= d) {
       LOG(INFO) << "Pruning directories with remaining removal time "
                 << removalTime.remaining();

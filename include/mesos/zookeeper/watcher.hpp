@@ -46,6 +46,7 @@ public:
       int64_t sessionId,
       const std::string& path)
   {
+    LOG(INFO)<<"k:enter ProcessWatcher:process:"<<type;
     if (type == ZOO_SESSION_EVENT) {
       if (state == ZOO_CONNECTED_STATE) {
         // Connected (initial or reconnect).

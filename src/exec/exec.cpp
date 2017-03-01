@@ -185,6 +185,11 @@ public:
         &ExecutorProcess::killTask,
         &KillTaskMessage::task_id);
 
+    install<RestartTaskMessage>(
+        &ExecutorProcess::restartTask,
+        &RestartTaskMessage::task_id);
+
+
     install<StatusUpdateAcknowledgementMessage>(
         &ExecutorProcess::statusUpdateAcknowledgement,
         &StatusUpdateAcknowledgementMessage::slave_id,
@@ -321,7 +326,7 @@ protected:
     tasks[task.task_id()] = task;
 
     VLOG(1) << "Executor asked to run task '" << task.task_id() << "'";
-
+    LOG(INFO) << "1 Executor asked to run task '" << task.task_id() << "'";
     Stopwatch stopwatch;
     if (FLAGS_v >= 1) {
       stopwatch.start();
@@ -341,16 +346,37 @@ protected:
     }
 
     VLOG(1) << "Executor asked to kill task '" << taskId << "'";
-
+    LOG(INFO) << "Executor asked to kill task '" << taskId << "'";
     Stopwatch stopwatch;
     if (FLAGS_v >= 1) {
       stopwatch.start();
     }
 
     executor->killTask(driver, taskId);
-
+    LOG(INFO) << "Executor::killTask took " << stopwatch.elapsed();
     VLOG(1) << "Executor::killTask took " << stopwatch.elapsed();
   }
+
+  void restartTask(const TaskID& taskId)
+  {
+    if (aborted.load()) {
+      LOG(INFO) << "froad:Ignoring restartTask task message for task " << taskId
+              << " because the driver is aborted!";
+      return;
+    }
+
+    LOG(INFO) << "froad:Executor asked to restartTask task '" << taskId << "'";
+
+    Stopwatch stopwatch;
+    if (FLAGS_v >= 1) {
+      stopwatch.start();
+    }
+
+    //executor->killTask(driver, taskId);
+    executor->restartTask(driver, taskId);
+    LOG(INFO) << "froad:Executor::restartTask took " << stopwatch.elapsed();
+  }
+
 
   void statusUpdateAcknowledgement(
       const SlaveID& slaveId,
@@ -525,6 +551,7 @@ protected:
 
   void sendStatusUpdate(const TaskStatus& status)
   {
+    LOG(INFO)<<"yes:sendStatusUpdate(const TaskStatus& status)";
     StatusUpdateMessage message;
     StatusUpdate* update = message.mutable_update();
     update->mutable_framework_id()->MergeFrom(frameworkId);
@@ -547,11 +574,14 @@ protected:
     update->mutable_status()->mutable_slave_id()->CopyFrom(slaveId);
 
     VLOG(1) << "Executor sending status update " << *update;
-
+    LOG(INFO) << "yes:Executor sending status update " << *update;
     // Capture the status update.
     updates[uuid] = *update;
 
     send(slave, message);
+    //os::sleep(Seconds(10));
+    //LOG(INFO) << "yes:send message:"<<message; 
+    LOG(INFO) << "yes:after Executor sending status update " << *update;
   }
 
   void sendFrameworkMessage(const string& data)
@@ -799,11 +829,12 @@ Status MesosExecutorDriver::start()
 
 Status MesosExecutorDriver::stop()
 {
+  LOG(INFO)<<"yes:MesosExecutorDriver::stop";
   synchronized (mutex) {
     if (status != DRIVER_RUNNING && status != DRIVER_ABORTED) {
       return status;
     }
-
+    LOG(INFO)<<"yes:here";
     CHECK(process != nullptr);
 
     dispatch(process, &ExecutorProcess::stop);

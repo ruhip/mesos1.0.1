@@ -72,6 +72,7 @@ void usage(const char* argv0)
 
 int main(int argc, char** argv)
 {
+  cout<<"yes:oh enter cli mesos.cpp main"<<endl;
   Option<string> value;
 
   // Try and add the absolute dirname of argv[0] to PATH so we can

@@ -223,6 +223,9 @@ docker::Flags dockerFlags(
   dockerFlags.docker_socket = flags.docker_socket;
   dockerFlags.launcher_dir = flags.launcher_dir;
 
+  dockerFlags.docker_inspect_period = flags.docker_inspect_period;
+  dockerFlags.docker_inspect_times = flags.docker_inspect_times;
+
   if (taskEnvironment.isSome()) {
     dockerFlags.task_environment = string(jsonify(taskEnvironment.get()));
   }

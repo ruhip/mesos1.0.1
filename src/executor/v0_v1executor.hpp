@@ -65,6 +65,11 @@ public:
       ExecutorDriver* driver,
       const mesos::TaskID& taskId) override;
 
+ /*froad*/
+  virtual void restartTask(
+      ExecutorDriver* driver,
+      const mesos::TaskID& taskId) override;
+
   virtual void frameworkMessage(
       ExecutorDriver* driver,
       const std::string& data) override;

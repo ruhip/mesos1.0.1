@@ -926,9 +926,15 @@ private:
 
   void revive(Framework* framework);
 
+  void restartTask(Framework* framework, const scheduler::Call::Restart& restart);
+
   void kill(
       Framework* framework,
       const scheduler::Call::Kill& kill);
+
+   void restart(
+      Framework* framework,
+      const scheduler::Call::Restart& restart);
 
   void shutdown(
       Framework* framework,

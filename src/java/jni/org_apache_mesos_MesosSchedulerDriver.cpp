@@ -747,6 +747,24 @@ JNIEXPORT jobject JNICALL Java_org_apache_mesos_MesosSchedulerDriver_killTask
 }
 
 
+JNIEXPORT jobject JNICALL Java_org_apache_mesos_MesosSchedulerDriver_restartTask
+  (JNIEnv* env, jobject thiz, jobject jtaskId)
+{
+  // Construct a C++ TaskID from the Java TaskId.
+  const TaskID& taskId = construct<TaskID>(env, jtaskId);
+
+  // Now invoke the underlying driver.
+  jclass clazz = env->GetObjectClass(thiz);
+
+  jfieldID __driver = env->GetFieldID(clazz, "__driver", "J");
+  MesosSchedulerDriver* driver =
+    (MesosSchedulerDriver*) env->GetLongField(thiz, __driver);
+
+  Status status = driver->restartTask(taskId);
+
+  return convert<Status>(env, status);
+}
+
 /*
  * Class:     org_apache_mesos_MesosSchedulerDriver
  * Method:    launchTasks

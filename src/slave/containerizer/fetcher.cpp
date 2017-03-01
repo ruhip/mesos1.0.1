@@ -84,7 +84,7 @@ Try<Nothing> Fetcher::recover(const SlaveID& slaveId, const Flags& flags)
 {
   // Good enough for now, simple, least-effort recovery.
   VLOG(1) << "Clearing fetcher cache";
-
+  VLOG(2) << "2 Clearing fetcher cache";
   string cacheDirectory = paths::getSlavePath(flags.fetcher_cache_dir, slaveId);
   Result<string> path = os::realpath(cacheDirectory);
   if (path.isError()) {
@@ -254,6 +254,7 @@ Future<Nothing> Fetcher::fetch(
     const Flags& flags)
 {
   if (commandInfo.uris().size() == 0) {
+    LOG(INFO)<<"yes:commandInfo.uris().size() == 0,so fetch return.";
     return Nothing();
   }
 
@@ -347,7 +348,9 @@ Future<Nothing> FetcherProcess::fetch(
 {
   VLOG(1) << "Starting to fetch URIs for container: " << containerId
           << ", directory: " << sandboxDirectory;
-
+  VLOG(2) << "2 Starting to fetch URIs for container: " << containerId
+          << ", directory: " << sandboxDirectory;
+  LOG(INFO)<<"Starting to fetch URIs for container: " << containerId<< ", directory: " << sandboxDirectory;
   // TODO(bernd-mesos): This will disappear once we inject flags at
   // Fetcher/FetcherProcess creation time. For now we trust this is
   // always the exact same value.
@@ -408,7 +411,7 @@ Future<Nothing> FetcherProcess::fetch(
       entries[uri] = None();
       continue;
     }
-
+    LOG(INFO)<<"yes:uri:"<<uri.value();
     // Check if this is already in the cache (but not necessarily
     // downloaded).
     const Option<shared_ptr<Cache::Entry>> entry =
@@ -561,7 +564,7 @@ Future<Nothing> FetcherProcess::__fetch(
   if (!flags.frameworks_home.empty()) {
     info.set_frameworks_home(flags.frameworks_home);
   }
-
+  LOG(INFO)<<"yes:run mesos-fetcher";
   return run(containerId, sandboxDirectory, user, info, flags)
     .repair(defer(self(), [=](const Future<Nothing>& future) {
       LOG(ERROR) << "Failed to run mesos-fetcher: " << future.failure();

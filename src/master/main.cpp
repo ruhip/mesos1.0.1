@@ -147,6 +147,8 @@ int main(int argc, char** argv)
   // TODO(avinash): Add more comments discussing the rationale behind for this
   // particular component ordering.
 
+  cout<<"test makefile .libs  enter mesos-master main func"<<endl;
+  //LOG(INFO) << "master:123 Build: " << build::DATE << " by " << build::USER;
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
   master::Flags flags;
@@ -206,7 +208,9 @@ int main(int argc, char** argv)
     cout << flags.usage() << endl;
     return EXIT_SUCCESS;
   }
-
+  cout<<"yes,wow no ,mesos-master ready"<<endl;
+  cout<<"enter mesos-master main func"<<endl;
+  LOG(INFO) << "master:123 Build: " << build::DATE << " by " << build::USER;
   if (flags.version) {
     cout << "mesos" << " " << MESOS_VERSION << endl;
     return EXIT_SUCCESS;

@@ -33,7 +33,7 @@
 #include <process/check.hpp>
 #include <process/collect.hpp>
 #include <process/io.hpp>
-
+//#include <stdlib.h>
 #include "common/status_utils.hpp"
 
 #include "docker/docker.hpp"
@@ -108,7 +108,7 @@ Try<Owned<Docker>> Docker::create(
     return Error("Invalid Docker socket path: " + socket);
   }
 
-  Owned<Docker> docker(new Docker(path, socket, config));
+  Owned<Docker> docker(new Docker(path, socket,config));
   if (!validate) {
     return docker;
   }
@@ -485,6 +485,26 @@ Try<Docker::Image> Docker::Image::create(const JSON::Object& json)
   return Docker::Image(entrypointOption, envOption);
 }
 
+int getMAC(string& sMac)
+{
+unsigned char HEXCHAR[16] = { '0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'A', 'B', 'C','D', 'E', 'F' };
+#define MAC_ADDR_LENGTH 12
+#define RANDOM(x) (rand()%x)
+
+   int num=0;
+   for (int i = 1; i < MAC_ADDR_LENGTH + 1; i++)
+   {
+	num = RANDOM(16);
+	//printf("Times: %d, Random Number: %d, HEX char: %c\r\n", i, n, HEXCHAR[n]);
+	sMac.append(1,HEXCHAR[num]);
+        if( i % 2 == 0 && i < MAC_ADDR_LENGTH)
+        {
+            sMac.append(1,':');
+        }
+    }
+
+    return 0;
+}
 
 Future<Option<int>> Docker::run(
     const ContainerInfo& containerInfo,
@@ -513,7 +533,7 @@ Future<Option<int>> Docker::run(
   /*ruhip modify 20161107*/
   //cout<<"ruhip:docker.cpp:run function"<<endl;
   LOG(INFO)<<"ruhip:docker modify";
-  //argv.push_back("-d");
+  argv.push_back("-d");
   /*end */
   if (dockerInfo.privileged()) {
     argv.push_back("--privileged");
@@ -831,6 +851,11 @@ Future<Option<int>> Docker::run(
     argv.push_back("/bin/sh");
   }
 
+  string strMac="--mac-address=";
+  getMAC(strMac);
+  LOG(INFO) << "froad:getMac: " << strMac;
+  argv.push_back(strMac);
+
   argv.push_back("--name");
   argv.push_back(name);
   argv.push_back(image);
@@ -894,6 +919,38 @@ Future<Option<int>> Docker::run(
 }
 
 
+Future<Option<int>> Docker::restart(
+    const string& containerName,
+    const Duration& timeout,
+    bool remove) const
+{
+  LOG(INFO)<<"froad:enter Docker::restart";
+  int timeoutSecs = (int) timeout.secs();
+  if (timeoutSecs < 0) {
+    return Failure("A negative timeout can not be applied to docker stop: " +
+                   stringify(timeoutSecs));
+  }
+
+  string cmd = path + " -H " + socket + " restart -t " + stringify(timeoutSecs) +
+               " " + containerName;
+
+  LOG(INFO) << "Running " << cmd;
+
+  Try<Subprocess> s = subprocess(
+      cmd,
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PIPE());
+
+  if (s.isError()) {
+    return Failure("Failed to create subprocess '" + cmd + "': " + s.error());
+  }
+
+  return s->status();
+}
+
+
+
 Future<Nothing> Docker::stop(
     const string& containerName,
     const Duration& timeout,
@@ -937,6 +994,7 @@ Future<Nothing> Docker::_stop(
     const Subprocess& s,
     bool remove)
 {
+  //docker.killtask = true;
   Option<int> status = s.status().get();
   LOG(INFO)<<"yes:enter Docker::_stop:remove:"<<remove;
   if (remove) {
@@ -997,6 +1055,204 @@ Future<Nothing> Docker::rm(
 }
 
 
+
+Future<string> Docker::statusinspect(
+    const int& inspectmaxnums,
+    const string& containerName,
+    const Option<Duration>& retryInterval) const
+{
+  Owned<Promise<string>> promise(new Promise<string>());
+
+  const string cmd =  path + " -H " + socket + " inspect --format='{{.State.Running}}' " + containerName;
+  _statusinspect(inspectmaxnums,cmd, promise, retryInterval);
+  LOG(INFO)<<"yes:Docker::statusinspect:"<<cmd;
+  return promise->future();
+}
+
+
+void Docker::_statusinspect(
+    const int& inspectmaxnums,
+    const string& cmd,
+    const Owned<Promise<string>>& promise,
+    const Option<Duration>& retryInterval)
+{
+  if (promise->future().hasDiscard()) {
+    promise->discard();
+    return;
+  }
+
+  VLOG(1) << "Running " << cmd;
+  LOG(INFO)<< "Running " << cmd;
+  Try<Subprocess> s = subprocess(
+      cmd,
+      Subprocess::PATH("/dev/null"),
+      Subprocess::PIPE(),
+      Subprocess::PIPE());
+
+  if (s.isError()) {
+    promise->fail("Failed to create subprocess '" + cmd + "': " + s.error());
+    return;
+  }
+
+  // Start reading from stdout so writing to the pipe won't block
+  // to handle cases where the output is larger than the pipe
+  // capacity.
+  const Future<string> output = io::read(s.get().out().get());
+
+  s.get().status()
+    .onAny([=]() { __statusinspect(inspectmaxnums,cmd, promise, retryInterval, output, s.get()); });
+}
+
+
+void Docker::__statusinspect(
+    const int& inspectmaxnums,
+    const string& cmd,
+    const Owned<Promise<string>>& promise,
+    const Option<Duration>& retryInterval,
+    Future<string> output,
+    const Subprocess& s)
+{
+  LOG(INFO)<<"froad:enter Docker::statusinspect";
+  if (promise->future().hasDiscard()) {
+    promise->discard();
+    output.discard();
+    return;
+  }
+
+/*
+ if( killtask == true )
+ {
+    LOG(INFO)<<"froad:kill task,so ready exit.";
+    promise->set(Future<string>("killtask"));
+    return; 
+ }
+*/
+ static int statusnozero=0;
+
+  // Check the exit status of 'docker inspect'.
+  CHECK_READY(s.status());
+
+  Option<int> status = s.status().get();
+  if(status.isSome())
+  {
+     LOG(INFO)<<"froad:status:"<<status.get();
+  }
+  if (!status.isSome()) {
+    promise->fail("No status found from '" + cmd + "'");
+  } else if (status.get() != 0) {
+   // output.discard();
+
+	if( statusnozero++ > inspectmaxnums )
+	{
+	    LOG(INFO)<<"froad:statusinspect with non-zero status code exceed ,so ready exit."<<inspectmaxnums;
+		//Future<string> output2("-2");
+	    //promise->set(output.get());
+            promise->set(Future<string>("0"));
+            // promise->fail("froad:statusinspect exit.");
+            return;
+    CHECK_SOME(s.err());
+    io::read(s.err().get())
+      .then(lambda::bind(
+                failure<Nothing>,
+                cmd,
+                status.get(),
+                lambda::_1))
+      .onAny([=](const Future<Nothing>& future) {
+          CHECK_FAILED(future);
+          promise->fail(future.failure());
+      });
+    return;
+		return;
+	}
+    output.discard();
+    LOG(INFO)<<"froad:statusinspect with non-zero status:statusnozero:"<<statusnozero;
+
+    if (retryInterval.isSome()) {
+      VLOG(1) << "Retrying statusinspect with non-zero status code. cmd: '"
+              << cmd << "', interval: " << stringify(retryInterval.get());
+      LOG(INFO)<<"yes:Retrying statusinspect with non-zero status code. cmd: '"
+              << cmd << "', interval: " << stringify(retryInterval.get());
+      Clock::timer(retryInterval.get(),
+                   [=]() { _statusinspect(inspectmaxnums,cmd, promise, retryInterval); } );
+      return;
+    }
+    LOG(INFO)<<"froad:oh no retryInterval";
+    CHECK_SOME(s.err());
+    io::read(s.err().get())
+      .then(lambda::bind(
+                failure<Nothing>,
+                cmd,
+                status.get(),
+                lambda::_1))
+      .onAny([=](const Future<Nothing>& future) {
+          CHECK_FAILED(future);
+          promise->fail(future.failure());
+      });
+    return;
+  }
+
+  statusnozero = 0;
+
+  LOG(INFO)<<"froad:now Read to EOF.";
+  // Read to EOF.
+  CHECK_SOME(s.out());
+  output
+    .onAny([=](const Future<string>& output) {
+      ___statusinspect(inspectmaxnums,cmd, promise, retryInterval, output);
+    });
+}
+
+
+void Docker::___statusinspect(
+    const int& inspectmaxnums,
+    const string& cmd,
+    const Owned<Promise<string>>& promise,
+    const Option<Duration>& retryInterval,
+    const Future<string>& output)
+{
+  LOG(INFO)<<"froad:now enter Docker::___statusinspect";
+  if (promise->future().hasDiscard()) {
+    promise->discard();
+    return;
+  }
+
+  if (!output.isReady()) {
+    promise->fail(output.isFailed() ? output.failure() : "future discarded");
+    return;
+  }
+
+  LOG(INFO)<<"froad:output.get():"<<output.get();
+ 
+  string sstatus = output.get();
+  LOG(INFO)<<"froad:output.get()2:"<<sstatus<<".";
+  static int nnotrunningnum=0;
+  //int nValue = sstatus.compare("true");
+  //LOG(INFO)<<"value:"<<nValue;
+  //LOG(INFO)<<"strcmp:"<<strcmp(sstatus.c_str(),"true")<<".";
+  if( sstatus.substr(0,4).compare("true") == 0 )
+  {
+      nnotrunningnum = 0;
+  }else
+  {
+      nnotrunningnum++;
+  }
+  LOG(INFO)<<"froad:nnotrunningnum:"<<nnotrunningnum;
+  if( nnotrunningnum > inspectmaxnums )
+  {
+      LOG(INFO)<<"froad:not running exceed max,now return.inspectmaxnums:"<<inspectmaxnums;
+      promise->set(output.get());
+      return;
+  }
+ 
+  LOG(INFO)<<"timecheck:again.";
+ Clock::timer(retryInterval.get(),
+       [=]() { _statusinspect(inspectmaxnums,cmd, promise, retryInterval); } );
+
+}
+
+
+
+
 Future<Docker::Container> Docker::inspect(
     const string& containerName,
     const Option<Duration>& retryInterval) const
@@ -1050,6 +1306,7 @@ void Docker::__inspect(
     Future<string> output,
     const Subprocess& s)
 {
+  LOG(INFO)<<"froad:enter Docker::__inspect";
   if (promise->future().hasDiscard()) {
     promise->discard();
     output.discard();
@@ -1060,7 +1317,10 @@ void Docker::__inspect(
   CHECK_READY(s.status());
 
   Option<int> status = s.status().get();
-
+  if(status.isSome())
+  {
+     LOG(INFO)<<"froad:status:"<<status.get();
+  }
   if (!status.isSome()) {
     promise->fail("No status found from '" + cmd + "'");
   } else if (status.get() != 0) {
@@ -1075,7 +1335,7 @@ void Docker::__inspect(
                    [=]() { _inspect(cmd, promise, retryInterval); } );
       return;
     }
-
+    LOG(INFO)<<"froad:oh no retryInterval";
     CHECK_SOME(s.err());
     io::read(s.err().get())
       .then(lambda::bind(
@@ -1089,7 +1349,7 @@ void Docker::__inspect(
       });
     return;
   }
-
+  LOG(INFO)<<"froad:now Read to EOF.";
   // Read to EOF.
   CHECK_SOME(s.out());
   output
@@ -1105,6 +1365,7 @@ void Docker::___inspect(
     const Option<Duration>& retryInterval,
     const Future<string>& output)
 {
+  LOG(INFO)<<"froad:now enter Docker::___inspect";
   if (promise->future().hasDiscard()) {
     promise->discard();
     return;
@@ -1115,6 +1376,8 @@ void Docker::___inspect(
     return;
   }
 
+  //LOG(INFO)<<"froad:output.get():"<<output.get();
+ 
   Try<Docker::Container> container = Docker::Container::create(
       output.get());
 

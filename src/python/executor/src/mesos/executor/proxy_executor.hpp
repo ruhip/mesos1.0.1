@@ -49,6 +49,11 @@ public:
   virtual void disconnected(ExecutorDriver* driver);
   virtual void launchTask(ExecutorDriver* driver, const TaskInfo& task);
   virtual void killTask(ExecutorDriver* driver, const TaskID& taskId);
+
+  /*froad*/
+  virtual void restartTask(ExecutorDriver* driver, const TaskID& taskId);
+  
+
   virtual void frameworkMessage(ExecutorDriver* driver,
                                 const std::string& data);
   virtual void shutdown(ExecutorDriver* driver);

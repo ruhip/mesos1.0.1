@@ -171,6 +171,11 @@ public:
       const Duration& timeout = Seconds(0),
       bool remove = false) const;
 
+   virtual process::Future<Option<int>> restart(
+    const string& containerName,
+    const Duration& timeout,
+    bool remove) const;
+
   // Performs 'docker kill --signal=<signal> CONTAINER'.
   virtual process::Future<Nothing> kill(
       const std::string& containerName,
@@ -187,6 +192,12 @@ public:
   virtual process::Future<Container> inspect(
       const std::string& containerName,
       const Option<Duration>& retryInterval = None()) const;
+
+  virtual process::Future<string> statusinspect(
+      const int& inspectmaxnums,
+      const std::string& containerName,
+      const Option<Duration>& retryInterval = None()) const;
+
 
   // Performs 'docker ps (-a)'.
   virtual process::Future<std::list<Container>> ps(
@@ -213,7 +224,8 @@ protected:
          const Option<JSON::Object>& _config)
        : path(_path),
          socket("unix://" + _socket),
-         config(_config) {}
+         config(_config),
+         killtask(false) {}
 
 private:
   static process::Future<Version> _version(
@@ -245,6 +257,27 @@ private:
   static void ___inspect(
       const std::string& cmd,
       const process::Owned<process::Promise<Container>>& promise,
+      const Option<Duration>& retryInterval,
+      const process::Future<std::string>& output);
+
+  static void _statusinspect(
+      const int& inspectmaxnums,
+      const std::string& cmd,
+      const process::Owned<process::Promise<string>>& promise,
+      const Option<Duration>& retryInterval);
+
+  static void __statusinspect(
+      const int& inspectmaxnums,
+      const std::string& cmd,
+      const process::Owned<process::Promise<string>>& promise,
+      const Option<Duration>& retryInterval,
+      process::Future<std::string> output,
+      const process::Subprocess& s);
+
+  static void ___statusinspect(
+      const int& inspectmaxnums,
+      const std::string& cmd,
+      const process::Owned<process::Promise<string>>& promise,
       const Option<Duration>& retryInterval,
       const process::Future<std::string>& output);
 
@@ -306,7 +339,10 @@ private:
 
   const std::string path;
   const std::string socket;
+  //const int inspectmaxnums;
   const Option<JSON::Object> config;
+  public:
+  bool killtask;
 };
 
 #endif // __DOCKER_HPP__

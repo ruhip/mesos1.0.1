@@ -153,6 +153,10 @@ public:
       const process::UPID& from,
       const KillTaskMessage& killTaskMessage);
 
+void restartTask(
+    const UPID& from,
+    const RestartTaskMessage& restartTaskMessage);
+
   void shutdownExecutor(
       const process::UPID& from,
       const FrameworkID& frameworkId,
@@ -762,7 +766,9 @@ struct Executor
         LOG(WARNING) << "Unable to send event to executor " << *this
                      << ": connection closed";
       }
+      LOG(INFO)<<"yes:http->send(message)";
     } else if (pid.isSome()) {
+      LOG(INFO)<<"yes:pid.isSome()";
       slave->send(pid.get(), message);
     } else {
       LOG(WARNING) << "Unable to send event to executor " << *this

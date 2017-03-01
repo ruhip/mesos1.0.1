@@ -256,6 +256,9 @@ public:
   // will be dropped (these semantics may be changed in the future).
   virtual Status killTask(const TaskID& taskId) = 0;
 
+  /*froad*/
+  virtual Status restartTask(const TaskID& taskId) = 0;
+
   // Accepts the given offers and performs a sequence of operations on
   // those accepted offers. See Offer.Operation in mesos.proto for the
   // set of available operations. Any remaining resources (i.e., those
@@ -424,6 +427,9 @@ public:
       const std::vector<OfferID>& offerIds,
       const std::vector<TaskInfo>& tasks,
       const Filters& filters = Filters());
+
+ /*froad*/
+ virtual Status restartTask(const TaskID& taskId);
 
   virtual Status killTask(const TaskID& taskId);
 

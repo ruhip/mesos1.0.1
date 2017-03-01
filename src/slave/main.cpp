@@ -219,7 +219,7 @@ int main(int argc, char** argv)
 
   if (ip_discovery_command.isSome()) {
     Try<string> ipAddress = os::shell(ip_discovery_command.get());
-
+    cout<<"ip_discovery_command 1:"<<strings::trim(ipAddress.get())<<endl;
     if (ipAddress.isError()) {
       EXIT(EXIT_FAILURE) << ipAddress.error();
     }
@@ -227,18 +227,22 @@ int main(int argc, char** argv)
     os::setenv("LIBPROCESS_IP", strings::trim(ipAddress.get()));
   } else if (ip.isSome()) {
     os::setenv("LIBPROCESS_IP", ip.get());
+    cout<<"ip 1:"<<ip.get()<<endl;
   }
 
   os::setenv("LIBPROCESS_PORT", stringify(port));
-
+  cout<<"LIBPROCESS_PORT 1:"<<stringify(port)<<endl;
   if (advertise_ip.isSome()) {
+    cout<<"advertise_ip 1:"<<advertise_ip.get()<<endl;
     os::setenv("LIBPROCESS_ADVERTISE_IP", advertise_ip.get());
   }
 
   if (advertise_port.isSome()) {
+    cout<<"LIBPROCESS_ADVERTISE_PORT 1:"<<advertise_port.get()<<endl;
     os::setenv("LIBPROCESS_ADVERTISE_PORT", advertise_port.get());
   }
-
+  //cout<<"test exit"<<endl;
+  //LOG(INFO) <<"test exit2";
   // Log build information.
   LOG(INFO) << "Build: " << build::DATE << " by " << build::USER;
   LOG(INFO) << "Version: " << MESOS_VERSION;
@@ -252,7 +256,8 @@ int main(int argc, char** argv)
   }
 
   const string id = process::ID::generate("slave"); // Process ID.
-
+  cout<<"generate id:"<<id<<endl;
+ // return 0;
   // If `process::initialize()` returns `false`, then it was called before this
   // invocation, meaning the authentication realm for libprocess-level HTTP
   // endpoints was set incorrectly. This should be the first invocation.
@@ -265,7 +270,7 @@ int main(int argc, char** argv)
   }
 
   logging::initialize(argv[0], flags, true); // Catch signals.
-
+  //return 0;
   // Log any flag warnings (after logging is initialized).
   foreach (const flags::Warning& warning, load->warnings) {
     LOG(WARNING) << warning.message;
@@ -408,6 +413,13 @@ int main(int argc, char** argv)
         createAuthorizationCallbacks(authorizer_.get()));
   }
 
+  if( authorizer_.isNone() )
+  {
+        LOG(INFO)<<"k:authorizer_ is None";
+  }else{
+        LOG(INFO)<<"k:authorizer_ is:"<<authorizer_.get();
+  }
+  //return 0;
   Files files(READONLY_HTTP_AUTHENTICATION_REALM, authorizer_);
   GarbageCollector gc;
   StatusUpdateManager statusUpdateManager(flags);
@@ -432,7 +444,7 @@ int main(int argc, char** argv)
 
 
   LOG(INFO) << "Starting Mesos agent";
-
+  //return 0;
   Slave* slave = new Slave(
       id,
       flags,
@@ -446,6 +458,8 @@ int main(int argc, char** argv)
       authorizer_);
 
   process::spawn(slave);
+  //LOG(INFO)<<"k:now exit";
+  //return 0;
   process::wait(slave->self());
 
   delete slave;

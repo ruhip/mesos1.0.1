@@ -145,6 +145,7 @@ void LeaderDetectorProcess::watched(
   // incumbent wins the election.
   Option<Group::Membership> current;
   foreach (const Group::Membership& membership, memberships.get()) {
+    //LOG(INFO)<<"k:"<<current.get().id()<<",";//<<membership.id()<<","<<stringify(current.get().id());
     current = min(current, membership);
   }
 
@@ -160,7 +161,7 @@ void LeaderDetectorProcess::watched(
     }
     promises.clear();
   }
-
+  LOG(INFO)<<"k:none";
   leader = current;
   watch(memberships.get());
 }

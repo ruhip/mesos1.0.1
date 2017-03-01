@@ -74,6 +74,14 @@ struct Flags : public mesos::internal::logging::Flags
         "task_environment",
         "A JSON map of environment variables and values that should\n"
         "be passed into the task launched by this executor.");
+
+    add(&docker_inspect_times,
+      "docker_inspect_times",
+      "inspect docker maxnum times" );
+
+    add(&docker_inspect_period,
+      "docker_inspect_period",
+      "The amount of time to inspect docker status period.\n");    
   }
 
   Option<std::string> container;
@@ -86,6 +94,8 @@ struct Flags : public mesos::internal::logging::Flags
 
   // TODO(alexr): Remove this after the deprecation cycle (started in 1.0).
   Option<Duration> stop_timeout;
+  Option<Duration> docker_inspect_period;
+  Option<std::string> docker_inspect_times; 
 };
 
 } // namespace docker {

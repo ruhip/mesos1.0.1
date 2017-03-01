@@ -751,6 +751,7 @@ Future<bool> MesosContainerizerProcess::launch(
     const PID<Slave>& slavePid,
     bool checkpoint)
 {
+  LOG(INFO)<<"yes:MesosContainerizerProcess::launch";
   if (containers_.contains(containerId)) {
     return Failure("Container already started");
   }
@@ -758,7 +759,8 @@ Future<bool> MesosContainerizerProcess::launch(
   if (taskInfo.isSome() &&
       taskInfo.get().has_container() &&
       taskInfo.get().container().type() != ContainerInfo::MESOS) {
-    return false;
+     LOG(INFO)<<"yes:taskInfo.get().container().type() != ContainerInfo::MESOS)";
+     return false;
   }
 
   // NOTE: We make a copy of the executor info because we may mutate
@@ -767,6 +769,7 @@ Future<bool> MesosContainerizerProcess::launch(
 
   if (executorInfo.has_container() &&
       executorInfo.container().type() != ContainerInfo::MESOS) {
+    LOG(INFO)<<"yes:executorInfo.container().type() != ContainerInfo::MESOS)";
     return false;
   }
 

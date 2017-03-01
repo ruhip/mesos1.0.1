@@ -121,6 +121,20 @@ public:
     received(event);
   }
 
+ /*froad*/
+  void restartTask(const mesos::TaskID& taskId)
+  {
+    Event event;
+    event.set_type(Event::KILL);
+
+    Event::Kill* kill = event.mutable_kill();
+
+    kill->mutable_task_id()->CopyFrom(evolve(taskId));
+
+    received(event);
+  }
+
+
   void launchTask(const mesos::TaskInfo& task)
   {
     Event event;
@@ -284,6 +298,12 @@ void V0ToV1Adapter::disconnected(ExecutorDriver*)
 void V0ToV1Adapter::killTask(ExecutorDriver*, const mesos::TaskID& taskId)
 {
   process::dispatch(process.get(), &V0ToV1AdapterProcess::killTask, taskId);
+}
+
+/*froad*/
+void V0ToV1Adapter::restartTask(ExecutorDriver*, const mesos::TaskID& taskId)
+{
+  process::dispatch(process.get(), &V0ToV1AdapterProcess::restartTask, taskId);
 }
 
 

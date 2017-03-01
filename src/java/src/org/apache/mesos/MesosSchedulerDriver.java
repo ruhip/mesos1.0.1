@@ -276,6 +276,9 @@ public class MesosSchedulerDriver implements SchedulerDriver {
 
   public native Status killTask(TaskID taskId);
 
+ /*froad*/
+ public native Status restartTask(TaskID taskId);
+
   public native Status acceptOffers(Collection<OfferID> offerIds,
                                     Collection<Offer.Operation> operations,
                                     Filters filters);

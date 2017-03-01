@@ -875,4 +875,14 @@ mesos::internal::slave::Flags::Flags()
       "mem_up",
       "promote mem_up nums");
 
+  add(&Flags::docker_inspect_times,
+      "docker_inspect_times",
+      "inspect docker maxnum times",
+      "5" );
+
+  add(&Flags::docker_inspect_period,
+      "docker_inspect_period",
+      "The amount of time to inspect docker status period.\n",
+      Seconds(5));
+
 }

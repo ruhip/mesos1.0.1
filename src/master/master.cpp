@@ -2041,6 +2041,10 @@ void Master::receive(
     case scheduler::Call::KILL:
       kill(framework, call.kill());
       break;
+ 
+    case scheduler::Call::RESTART:
+      restart(framework, call.restart());
+      break;
 
     case scheduler::Call::SHUTDOWN:
       shutdown(framework, call.shutdown());
@@ -4085,10 +4089,116 @@ void Master::killTask(
   kill(framework, call);
 }
 
+/*froad*/
+void Master::restartTask(Framework* framework, const scheduler::Call::Restart& restart)
+{
+  CHECK_NOTNULL(framework);
+  LOG(INFO)<<"froad:enter Master::restartTask:"<<restart.task_id();
+  /*
+  string strTaskid = restart.task_id().value();
+  int nFind = restart.task_id().value().rfind("_restart");
+  if( nFind > 0 )
+  {
+      strTaskid = strTaskid.substr(0,nFind);
+      nFind = strTaskid.find("\"");
+	if ( nFind > 0 )
+	{
+            strTaskid = strTaskid.substr(nFind+1, strTaskid.length()-nFind);
+            strTaskid = strTaskid.substr(0, strTaskid.length() - 2);
+	}
+  }
+  TaskID sTaskid;
+  sTaskid.set_value(strTaskid);
+  */
+  const TaskID& taskId = restart.task_id();
+  //const TaskID& taskId = sTaskid;
+  const Option<SlaveID> slaveId =
+    restart.has_slave_id() ? Option<SlaveID>(restart.slave_id()) : None();
+    
+  LOG(INFO) << "froad:Asked to restart task " << taskId
+            << " of framework " << *framework;
+            
+            
+  Task* task = framework->getTask(taskId);
+  if (task == nullptr) {
+    LOG(WARNING) << "Cannot restart task " << taskId
+                 << " of framework " << *framework
+                 << " because it is unknown; performing reconciliation";
+
+    return;
+  }
+
+  if (slaveId.isSome() && !(slaveId.get() == task->slave_id())) {
+    LOG(WARNING) << "Cannot restart task " << taskId << " of agent "
+                 << slaveId.get() << " of framework " << *framework
+                 << " because it belongs to different agent "
+                 << task->slave_id();
+    // TODO(vinod): Return a "Bad Request" when using HTTP API.
+    return;
+  }
+
+  Slave* slave = slaves.registered.get(task->slave_id());
+  CHECK(slave != nullptr) << "Unknown agent " << task->slave_id();
+
+  /*
+  // We add the task to 'killedTasks' here because the slave
+  // might be partitioned or disconnected but the master
+  // doesn't know it yet.
+  slave->killedTasks.put(framework->id(), taskId);
+*/
+  // NOTE: This task will be properly reconciled when the disconnected slave
+  // re-registers with the master.
+  // We send the KillTaskMessage even if we have already sent one, just in case
+  // the previous one was dropped by the network but it didn't trigger a slave
+  // re-registration (and hence reconciliation).
+  if (slave->connected) {
+    LOG(INFO) << "Telling agent " << *slave
+              << " to restart task " << taskId
+              << " of framework " << *framework;
+
+   // KillTaskMessage message;
+    RestartTaskMessage message;
+    message.mutable_framework_id()->MergeFrom(framework->id());
+    //message.mutable_task_id()->MergeFrom(taskId);
+    message.mutable_task_id()->MergeFrom(restart.task_id());
+    if (restart.has_kill_policy()) {
+      message.mutable_kill_policy()->MergeFrom(restart.kill_policy());
+    }
+    LOG(INFO)<<"froad:now send RestartTaskMessage to slaver.";
+    send(slave->pid, message);
+  } else {
+    LOG(WARNING) << "froad:Cannot kill restart " << taskId
+                 << " of framework " << *framework
+                 << " because the agent " << *slave << " is disconnected."
+                 << " restart will be retried if the agent re-registers";
+  }
+            
+  return;
+}
+
+
+void Master::restart(Framework* framework, const scheduler::Call::Restart& restart)
+{
+  CHECK_NOTNULL(framework);
+  LOG(INFO)<<"froad:enter Master::restart func.";
+  //if( kill.task_id().value().rfind("_restart") > 0 )
+  {
+      restartTask(framework,restart);
+      return;
+  }
+}
 
 void Master::kill(Framework* framework, const scheduler::Call::Kill& kill)
 {
   CHECK_NOTNULL(framework);
+
+  /*froad*/
+  /*
+  if( kill.task_id().value().rfind("_restart") > 0 )
+  {
+      restartTask(framework,kill);
+      return;
+  }*/
 
   ++metrics->messages_kill_task;
 

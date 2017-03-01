@@ -154,6 +154,8 @@ public:
   bool http_command_executor;
   Option<std::string> cpu_up;
   Option<std::string> mem_up;
+  Duration docker_inspect_period;
+  std::string docker_inspect_times;
 };
 
 } // namespace slave {

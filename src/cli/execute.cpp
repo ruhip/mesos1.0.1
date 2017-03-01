@@ -673,6 +673,7 @@ private:
 
 int main(int argc, char** argv)
 {
+  cout<<"yes:oh enter cli main"<<endl;
   Flags flags;
 
   // Load flags from command line only.
