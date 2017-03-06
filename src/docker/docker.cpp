@@ -851,10 +851,10 @@ Future<Option<int>> Docker::run(
     argv.push_back("/bin/sh");
   }
 
-  string strMac="--mac-address=";
-  getMAC(strMac);
-  LOG(INFO) << "froad:getMac: " << strMac;
-  argv.push_back(strMac);
+  //string strMac="--mac-address=";
+  //getMAC(strMac);
+  //LOG(INFO) << "froad:getMac: " << strMac;
+  //argv.push_back(strMac);
 
   argv.push_back("--name");
   argv.push_back(name);
@@ -1112,7 +1112,7 @@ void Docker::__statusinspect(
     Future<string> output,
     const Subprocess& s)
 {
-  LOG(INFO)<<"froad:enter Docker::statusinspect";
+  //LOG(INFO)<<"froad:enter Docker::statusinspect";
   if (promise->future().hasDiscard()) {
     promise->discard();
     output.discard();
@@ -1133,16 +1133,13 @@ void Docker::__statusinspect(
   CHECK_READY(s.status());
 
   Option<int> status = s.status().get();
-  if(status.isSome())
-  {
-     LOG(INFO)<<"froad:status:"<<status.get();
-  }
   if (!status.isSome()) {
     promise->fail("No status found from '" + cmd + "'");
   } else if (status.get() != 0) {
    // output.discard();
 
-	if( statusnozero++ > inspectmaxnums )
+   statusnozero++;
+	if( statusnozero >= inspectmaxnums )
 	{
 	    LOG(INFO)<<"froad:statusinspect with non-zero status code exceed ,so ready exit."<<inspectmaxnums;
 		//Future<string> output2("-2");
@@ -1150,19 +1147,6 @@ void Docker::__statusinspect(
             promise->set(Future<string>("0"));
             // promise->fail("froad:statusinspect exit.");
             return;
-    CHECK_SOME(s.err());
-    io::read(s.err().get())
-      .then(lambda::bind(
-                failure<Nothing>,
-                cmd,
-                status.get(),
-                lambda::_1))
-      .onAny([=](const Future<Nothing>& future) {
-          CHECK_FAILED(future);
-          promise->fail(future.failure());
-      });
-    return;
-		return;
 	}
     output.discard();
     LOG(INFO)<<"froad:statusinspect with non-zero status:statusnozero:"<<statusnozero;
@@ -1193,7 +1177,6 @@ void Docker::__statusinspect(
 
   statusnozero = 0;
 
-  LOG(INFO)<<"froad:now Read to EOF.";
   // Read to EOF.
   CHECK_SOME(s.out());
   output
@@ -1210,7 +1193,6 @@ void Docker::___statusinspect(
     const Option<Duration>& retryInterval,
     const Future<string>& output)
 {
-  LOG(INFO)<<"froad:now enter Docker::___statusinspect";
   if (promise->future().hasDiscard()) {
     promise->discard();
     return;
@@ -1221,14 +1203,10 @@ void Docker::___statusinspect(
     return;
   }
 
-  LOG(INFO)<<"froad:output.get():"<<output.get();
+  //LOG(INFO)<<"froad:output.get():"<<output.get();
  
   string sstatus = output.get();
-  LOG(INFO)<<"froad:output.get()2:"<<sstatus<<".";
   static int nnotrunningnum=0;
-  //int nValue = sstatus.compare("true");
-  //LOG(INFO)<<"value:"<<nValue;
-  //LOG(INFO)<<"strcmp:"<<strcmp(sstatus.c_str(),"true")<<".";
   if( sstatus.substr(0,4).compare("true") == 0 )
   {
       nnotrunningnum = 0;
@@ -1236,15 +1214,14 @@ void Docker::___statusinspect(
   {
       nnotrunningnum++;
   }
-  LOG(INFO)<<"froad:nnotrunningnum:"<<nnotrunningnum;
-  if( nnotrunningnum > inspectmaxnums )
+  LOG(INFO)<<"froad:nnotrunningnum:"<<nnotrunningnum<<","<<sstatus;
+  if( nnotrunningnum >= inspectmaxnums )
   {
       LOG(INFO)<<"froad:not running exceed max,now return.inspectmaxnums:"<<inspectmaxnums;
       promise->set(output.get());
       return;
   }
  
-  LOG(INFO)<<"timecheck:again.";
  Clock::timer(retryInterval.get(),
        [=]() { _statusinspect(inspectmaxnums,cmd, promise, retryInterval); } );
 
@@ -1324,6 +1301,33 @@ void Docker::__inspect(
   if (!status.isSome()) {
     promise->fail("No status found from '" + cmd + "'");
   } else if (status.get() != 0) {
+   
+    static int nFailInspectNums = 0;
+    nFailInspectNums++; 
+    if( output.isReady() )
+    {
+       LOG(INFO)<<"froad:status != 0,output:"<<nFailInspectNums<<","<<output.get();
+    }
+    if( nFailInspectNums > 20 )
+    {
+        LOG(INFO)<<"froad:sorry:inspect fail.err:"<<s.err().get();
+        //CHECK_SOME(s.err());
+       /*
+            CHECK_SOME(s.err());
+    io::read(s.err().get())
+      .then(lambda::bind(
+                failure<Nothing>,
+                cmd,
+                status.get(),
+                lambda::_1))
+      .onAny([=](const Future<Nothing>& future) {
+          CHECK_FAILED(future);
+          promise->fail(future.failure());
+      });
+        return;*/
+    }    
+
+ 
     output.discard();
 
     if (retryInterval.isSome()) {
@@ -1391,6 +1395,16 @@ void Docker::___inspect(
             << cmd << "', interval: " << stringify(retryInterval.get());
     LOG(INFO)<<"yes:Retrying inspect since container not yet started. cmd: '"
             << cmd << "', interval: " << stringify(retryInterval.get());
+
+    static int nnotstartnums = 0;
+    nnotstartnums++;
+    LOG(INFO)<<"not start times:"<<nnotstartnums;
+    if( nnotstartnums > 50 )
+    {
+       LOG(INFO)<<"froad:sorrry,not start exceed to 50 times.so return.";
+       promise->fail("not start exceed to 50 times.");
+       return;
+    }
 
     Clock::timer(retryInterval.get(),
                  [=]() { _inspect(cmd, promise, retryInterval); } );

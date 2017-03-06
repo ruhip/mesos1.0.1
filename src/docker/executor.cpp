@@ -193,7 +193,7 @@ public:
           status.set_state(TASK_RUNNING);
           status.set_data(container.output);
           cout<<"yes:3 TASK_RUNNING"<<endl;
-          LOG(INFO) << "froad:status.set_data:"<<container.output;
+          //LOG(INFO) << "froad:status.set_data:"<<container.output;
           if (container.ipAddress.isSome()) {
             // TODO(karya): Deprecated -- Remove after 0.25.0 has shipped.
             Label* label = status.mutable_labels()->add_labels();
