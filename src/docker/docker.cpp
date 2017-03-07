@@ -1308,11 +1308,11 @@ void Docker::__inspect(
     {
        LOG(INFO)<<"froad:status != 0,output:"<<nFailInspectNums<<","<<output.get();
     }
-    if( nFailInspectNums > 20 )
+    //if( nFailInspectNums > 20 )
     {
-        LOG(INFO)<<"froad:sorry:inspect fail.err:"<<s.err().get();
-        //CHECK_SOME(s.err());
-       /*
+        LOG(INFO)<<"froad:sorry:inspect fail.err:";
+       // CHECK_SOME(s.err());
+       
             CHECK_SOME(s.err());
     io::read(s.err().get())
       .then(lambda::bind(
@@ -1322,9 +1322,10 @@ void Docker::__inspect(
                 lambda::_1))
       .onAny([=](const Future<Nothing>& future) {
           CHECK_FAILED(future);
-          promise->fail(future.failure());
+          //promise->fail(future.failure());
+          LOG(INFO)<<future.failure();
       });
-        return;*/
+        //return;
     }    
 
  
